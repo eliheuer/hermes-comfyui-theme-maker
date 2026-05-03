@@ -19,39 +19,84 @@ right fit.
 
 ## Workflow
 
-1. **Always call `list_comfyui_tokens` first.** Pass `layer="all"`. The
-   response contains every token you can override, plus its current value
-   and a short description. Do not invent token names — only override what
-   appears in the response.
-2. **Decide the palette intent.** From the user's description, pick:
-   - **Mode** — dark, light, or either. Default to dark when the user is
-     vague; that is the prevailing ComfyUI environment.
-   - **Color scheme** — monochromatic, analogous, complementary, triadic.
-   - **Accent hue** — the dominant non-neutral.
-3. **Map intent to concrete hex values.** Apply these heuristics:
-   - The `charcoal` ramp (100 → 800) is the dark-mode neutral spine. Keep
-     it monotonically darkening; the rendered lightness should step
-     evenly. `charcoal-800` is the darkest (typically the primary
-     background); `charcoal-100` is the lightest (high-contrast text).
-   - The `smoke` ramp is the light-mode neutral spine, same shape.
-   - For dark themes you may leave the `smoke` ramp at defaults (it will
-     not visually appear in dark mode).
-   - `coral`, `gold`, `jade`, `azure`, `magenta`, `ocean` are accent
-     ramps. If you change an accent's hue, retune all steps so
-     hover/active states stay coherent (lower numbers lighter, higher
-     darker — match the existing ramp shape).
-   - Run/Stop colors (`app-mode-go-*`, `app-mode-stop-*`) are hard-coded
-     hex in PR #11317 — always override them explicitly when theming the
-     new App Mode. Keep `bg-hover` lighter than `bg`; `border` darker.
-4. **Call `write_comfyui_theme`.** Pass a slug `name` and a flat
-   `overrides` dict of `{token-name: value}`. Names omit the leading
-   `--`. Values must be concrete (hex, rgb, rgba), not `var()` references.
-5. **Call `apply_comfyui_theme`.** This swaps the active theme via a
-   single `@import` line in the frontend's `style.css`, between sentinel
-   comments. Idempotent — only one theme active at a time.
-6. **Briefly explain what you did.** One short paragraph: mode, scheme,
-   accent, any notable trade-offs. The user can then iterate ("warmer",
-   "less saturated", "more contrast").
+The **preferred** workflow uses ComfyUI to generate a small reference
+image first, then extracts a real palette from it to anchor the theme.
+A **fallback** workflow skips the image step and reasons from the
+description alone — use it when ComfyUI is unreachable, the user
+declines visual research, or this is a refinement turn (see "Iteration"
+below).
+
+### Preferred workflow — visual-research loop
+
+1. **Call `list_comfyui_tokens(layer="all")`** to ground yourself in the
+   real override surface. Do not invent token names.
+2. **Plan a mood prompt for the image generator.** Translate the user's
+   request into a concrete anime-styled scene description: subjects,
+   lighting, color cues, atmosphere. The Anima/Qwen stack is anime /
+   non-photorealistic, so describe accordingly. Quality boilerplate
+   ("masterpiece, best quality, ...") is added automatically — don't
+   include it yourself.
+3. **Call `generate_mood_image(prompt=…, size=768)`** to get a reference
+   PNG. Typical latency: 10–25 s on M-series.
+4. **Call `extract_palette_from_image(path=…, n_colors=8)`** to get the
+   dominant colors as `[{hex, percent}, …]` sorted by pixel count.
+5. **Map extracted colors onto token ramps.**
+   - Sort the returned colors by perceived lightness (eyeball — darker
+     hex first). The 4–6 darkest become the `charcoal` ramp anchors:
+     `charcoal-800` is the darkest, `charcoal-100` the lightest. Pick
+     intermediate ramp steps by interpolating lightness between anchors
+     so the spine remains monotonic.
+   - The 1–2 most saturated colors become accent ramp anchors. A warm
+     accent → `coral-*` or `gold-*`. A cool accent → `azure-*` or
+     `magenta-*`. Re-tune all steps of the chosen ramp so hover/active
+     stay coherent (lower-numbered = lighter, higher = darker).
+   - Pick `app-mode-go-bg` as a green that has decent contrast with
+     `charcoal-800`; `bg-hover` slightly lighter, `border` darker.
+     Mirror for `app-mode-stop-*` in red.
+6. **Call `write_comfyui_theme(name=…, overrides=…)`.** Names omit the
+   leading `--`. Values must be concrete (hex, rgb, rgba), not `var()`.
+7. **Call `apply_comfyui_theme(name=…)`.** Idempotent; one theme at a
+   time. Vite HMR live-reloads.
+8. **Briefly summarize.** One short paragraph: mode, where the palette
+   came from (the generated reference), accent picks, any notable
+   trade-offs. The user can then iterate ("warmer", "less saturated",
+   "more contrast").
+
+### Fallback workflow — text-only
+
+If `generate_mood_image` returns an `error` field, do **not** retry
+endlessly. Skip steps 3–5 of the preferred workflow and pick palette
+anchors from the description using your own design judgment plus the
+heuristics below. Mention to the user that visual research was
+unavailable so the result is description-only.
+
+### Iteration — refining without re-generation
+
+When the user says "warmer", "more contrast", "less saturated", etc.
+about an already-applied theme, do **not** call `generate_mood_image`
+again. Read the existing overrides, adjust the relevant hex values, and
+call `write_comfyui_theme` (overwriting the same `name`) and
+`apply_comfyui_theme`. Vite HMR re-loads with the tweak.
+
+## Mapping extracted palettes onto ramps
+
+When `extract_palette_from_image` returns 8 colors, you typically have:
+
+- 3–5 dark neutrals → fill the `charcoal` ramp (or `smoke` for light
+  themes). If fewer than 8 ramp steps have direct anchors, interpolate
+  the gaps so lightness steps evenly.
+- 1–2 warm or cool saturated colors → one accent ramp. Don't try to
+  cover two accent ramps from a single image; pick one.
+- 1–2 mid-tones → mostly redundant for ramp anchors. Useful for
+  `node-component-*` semantic tokens if they look notably different.
+
+Heuristic for assigning the darkest extracted color: it almost always
+goes on `charcoal-800` (primary dark background). The lightest extracted
+color often becomes `charcoal-100` (high-contrast text on dark).
+
+If the extracted palette has *no* clear accent (everything is neutral),
+keep the existing accent ramps at default — a desaturated theme reads
+as professional, while jamming a forced accent in reads as awkward.
 
 ## Token taxonomy
 
@@ -151,46 +196,74 @@ design system was built to prevent.
 - If `list_comfyui_tokens` returns a token you don't recognize, leave it
   alone — it's already wired correctly by the design system.
 
-## Worked example
+## Worked example — preferred workflow
 
-**User:** "Give me a deep ocean theme — dark, cool, with cyan accents."
+**User:** *"make me a campfire theme"*
 
-**Decisions:**
+**Step 1 — `list_comfyui_tokens(layer="all")`.** Confirm token surface
+(67 tokens, 4 layers).
 
-- Mode: dark → override `charcoal-*`, leave `smoke-*` alone.
-- Scheme: monochromatic blue-green with cyan accent.
-- Charcoal ramp: shift toward a navy undertone (slight desaturation).
-- Azure ramp: re-tune toward true cyan, brighter highlights.
-- App-mode go: cool teal (reads as "go" without competing with the cyan
-  accent); stop: warm coral so it still reads as warning.
+**Step 2 — plan the mood prompt.** Campfire vibe is warm, dark, with
+ember oranges and dim ambient. An anime-styled prompt that captures it:
 
-**Tool call:**
+> "a quiet campfire in autumn forest at dusk, warm orange glow on
+> burnt logs, soft amber light through leaves, deep ember reds,
+> atmospheric fog"
+
+**Step 3 — `generate_mood_image(prompt=…, size=768)`.** Returns
+`{ok: true, path: "~/.cache/.../<id>.png", elapsed_seconds: 21.3, ...}`.
+
+**Step 4 — `extract_palette_from_image(path=…, n_colors=8)`.** Returns
+something like:
+
+    #181b1e   15.9%   forest dark   (charcoal-800 anchor)
+    #635450   13.9%   warm ash gray (charcoal-300 / mid)
+    #4e2514   13.7%   charred wood  (charcoal-700 / coral-700)
+    #433f3f   12.6%   warm dark gray
+    #292323   12.5%   ember soot    (charcoal-700)
+    #793d26   11.8%   copper sienna (coral-500 anchor)
+    #bf7c49   10.7%   fire-glow amber (gold-400 anchor)
+    #0f0f10    8.9%   near-black    (charcoal-800 darker)
+
+**Step 5 — map onto ramps.** Charcoal ramp from the warm dark anchors
+(monotonic darkening), interpolating gaps. Coral ramp from the copper
+sienna with brighter/darker steps derived. Gold ramp from the amber.
+App-mode Run / Stop sit at warm green / warm red contrasting against
+the dark background.
+
+**Steps 6 and 7 — write and apply.**
 
     write_comfyui_theme(
-      name="deep-ocean",
+      name="campfire-mood",
       overrides={
-        "color-charcoal-100": "#5a6e80",
-        "color-charcoal-200": "#4a5e72",
-        "color-charcoal-300": "#3d5163",
-        "color-charcoal-400": "#324453",
-        "color-charcoal-500": "#293645",
-        "color-charcoal-600": "#1f2c39",
-        "color-charcoal-700": "#16222e",
-        "color-charcoal-800": "#0c1620",
-        "color-azure-300": "#7df9ff",
-        "color-azure-400": "#00d4ff",
-        "color-azure-600": "#00a3cc",
-        "app-mode-go-bg": "#00b894",
-        "app-mode-go-bg-hover": "#00d2a8",
-        "app-mode-go-border": "#007a64",
-        "app-mode-stop-bg": "#ff6b6b",
-        "app-mode-stop-bg-hover": "#ff8585",
-        "app-mode-stop-border": "#cc3333",
+        "color-charcoal-100": "#8a7060",
+        "color-charcoal-200": "#6f594a",
+        "color-charcoal-300": "#5a473b",
+        "color-charcoal-400": "#483830",
+        "color-charcoal-500": "#3a2d27",
+        "color-charcoal-600": "#2e231e",
+        "color-charcoal-700": "#221915",
+        "color-charcoal-800": "#15100c",
+        "color-coral-500": "#bf7c49",
+        "color-coral-600": "#a05a2c",
+        "color-coral-700": "#793d26",
+        "color-gold-400": "#f5c267",
+        "color-gold-500": "#e8a942",
+        "color-gold-600": "#c8851f",
+        "app-mode-go-bg": "#5a8a35",
+        "app-mode-go-bg-hover": "#6da342",
+        "app-mode-go-border": "#3d6b22",
+        "app-mode-stop-bg": "#c8421f",
+        "app-mode-stop-bg-hover": "#e0593a",
+        "app-mode-stop-border": "#8a2c12",
       }
     )
 
-Then `apply_comfyui_theme(name="deep-ocean")`, then summarize:
+Then `apply_comfyui_theme(name="campfire-mood")` and summarize:
 
-> Applied a deep-ocean dark theme: navy-shifted neutrals, cyan accent
-> ramp, teal Run / coral Stop. Vite HMR should refresh the browser. Say
-> "warmer", "more saturation", or "more contrast" to iterate.
+> Generated a campfire reference (autumn forest, ember light) and
+> mapped its palette onto the theme: warm dark neutrals from the
+> forest tones, coral and gold ramps from the ember and amber
+> highlights, forest-green Run / warm-red Stop. Browser should
+> refresh. Say "warmer", "more saturation", or "more contrast" to
+> iterate without re-generating the reference.

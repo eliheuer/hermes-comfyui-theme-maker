@@ -32,3 +32,15 @@ def register(ctx):
         schema=schemas.APPLY_THEME,
         handler=tools.apply_theme,
     )
+    ctx.register_tool(
+        name="generate_mood_image",
+        toolset=TOOLSET,
+        schema=schemas.GENERATE_MOOD_IMAGE,
+        handler=tools.generate_mood_image,
+    )
+    ctx.register_tool(
+        name="extract_palette_from_image",
+        toolset=TOOLSET,
+        schema=schemas.EXTRACT_PALETTE_FROM_IMAGE,
+        handler=tools.extract_palette_from_image,
+    )
