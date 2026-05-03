@@ -172,6 +172,18 @@ comments — idempotent, removable, single source of truth.
 - ComfyUI_frontend PR #11317 branch `app-mode-semi-customizable-layout`
   in graph mode, app mode, and builder mode
 
+## Project documentation
+
+For the design vision, roadmap, and load-bearing decisions:
+
+- [`PLAN.md`](./PLAN.md) — vision, roadmap (current MVP / next /
+  stretch), time budget, decisions with rationale, open questions.
+- [`docs/architecture.md`](./docs/architecture.md) — component map,
+  end-to-end data flow, file layout, integration points, tool
+  inventory, failure modes.
+- [`docs/comfyui-api-notes.md`](./docs/comfyui-api-notes.md) — ComfyUI
+  HTTP API reference for the planned image-gen tools.
+
 ## License
 
 GPL-3.0-or-later. See [LICENSE](./LICENSE).
