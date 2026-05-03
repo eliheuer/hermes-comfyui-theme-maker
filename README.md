@@ -38,19 +38,21 @@ Built for the Hermes Agent Creative Hackathon.
 brew install llama.cpp
 
 # Q4_K_M (~22 GB). Comfortable on 48 GB + ComfyUI running.
-huggingface-cli download NousResearch/Hermes-4.3-36B-GGUF \
-    "Hermes-4.3-36B-Q4_K_M.gguf" \
-    --local-dir ~/models/hermes-4.3-36b
+mkdir -p ~/models/hermes-4.3-36b
+curl -L --fail -C - --retry 5 \
+    https://huggingface.co/NousResearch/Hermes-4.3-36B-GGUF/resolve/main/hermes-4_3_36b-Q4_K_M.gguf \
+    -o ~/models/hermes-4.3-36b/hermes-4_3_36b-Q4_K_M.gguf
 ```
 
-Smaller fallback if memory is tight: download `Hermes-4-14B-GGUF` at
-`Q5_K_M` (~10 GB) instead.
+Smaller fallback if memory is tight: download `hermes-4_3_36b-Q3_K_M.gguf`
+(~17 GB) from the same repo, or grab `Hermes-4-14B-GGUF` at `Q5_K_M`
+(~10 GB) instead.
 
 ### 2. Start the inference server
 
 ```bash
 llama-server \
-    --model ~/models/hermes-4.3-36b/Hermes-4.3-36B-Q4_K_M.gguf \
+    --model ~/models/hermes-4.3-36b/hermes-4_3_36b-Q4_K_M.gguf \
     --ctx-size 65536 \
     --host 127.0.0.1 \
     --port 8080
