@@ -1,0 +1,19 @@
+name: hermes_comfyui_theme_maker
+version: 0.1.0
+description: |
+  Generate ComfyUI frontend themes from natural-language descriptions via a
+  Hermes skill (design knowledge) plus tools (file I/O). Targets the three-layer
+  CSS token surface: palette, semantic, app-mode.
+author: Eli Heuer
+license: GPL-3.0-or-later
+homepage: https://github.com/eliheuer/hermes-comfyui-theme-maker
+
+provides:
+  skills:
+    - comfyui-theme
+  toolsets:
+    - comfyui-theme
+  tools:
+    - list_comfyui_tokens
+    - write_comfyui_theme
+    - apply_comfyui_theme
