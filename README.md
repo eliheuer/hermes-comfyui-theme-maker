@@ -124,6 +124,26 @@ Hermes will:
 Vite HMR live-reloads the browser. Iterate by saying "make it warmer" or
 "less saturated" — Hermes will rewrite and re-apply.
 
+## Examples
+
+`examples/` contains hand-designed reference themes you can apply
+directly without running Hermes — useful as known-good baselines to
+compare against LLM output, or for offline preview.
+
+- [`campfire.css`](./examples/campfire.css) — warm dark theme. Charcoal
+  ramp shifted to burnt-wood browns, coral and gold ramps tuned to ember
+  oranges and amber yellows, forest-green Run / warm-red Stop.
+
+To apply one manually:
+
+```bash
+cp examples/campfire.css \
+   "$HERMES_COMFYUI_FRONTEND_PATH/src/assets/css/themes/"
+```
+
+Then in `hermes`: `apply_comfyui_theme(name="campfire")`. Or add the
+`@import` line to `style.css` by hand.
+
 ## How it works
 
 ComfyUI_frontend exposes a clean three-layer CSS custom-property system:

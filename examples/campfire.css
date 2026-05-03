@@ -1,0 +1,36 @@
+/* hermes-comfyui-theme-maker: campfire
+ *
+ * Hand-designed reference theme. Use this as a known-good baseline to
+ * compare against LLM output, or apply it directly:
+ *
+ *   cp examples/campfire.css \
+ *      $HERMES_COMFYUI_FRONTEND_PATH/src/assets/css/themes/
+ *
+ * Then in hermes:  apply_comfyui_theme(name="campfire")
+ *
+ * Mode: dark. Charcoal ramp shifted to warm browns (burnt wood, ash);
+ * coral and gold ramps tuned to ember oranges and amber yellows;
+ * forest-green Run / warm-red Stop.
+ */
+:root {
+  --color-charcoal-100: #8a7060;
+  --color-charcoal-200: #6f594a;
+  --color-charcoal-300: #5a473b;
+  --color-charcoal-400: #483830;
+  --color-charcoal-500: #3a2d27;
+  --color-charcoal-600: #2e231e;
+  --color-charcoal-700: #221915;
+  --color-charcoal-800: #15100c;
+  --color-coral-500: #ff6b3d;
+  --color-coral-600: #e8541f;
+  --color-coral-700: #b33a17;
+  --color-gold-400: #f5c267;
+  --color-gold-500: #e8a942;
+  --color-gold-600: #c8851f;
+  --app-mode-go-bg: #5a8a35;
+  --app-mode-go-bg-hover: #6da342;
+  --app-mode-go-border: #3d6b22;
+  --app-mode-stop-bg: #c8421f;
+  --app-mode-stop-bg-hover: #e0593a;
+  --app-mode-stop-border: #8a2c12;
+}

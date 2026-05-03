@@ -70,6 +70,41 @@ The frontend has three layered token sources:
 Most themes only need ~20 overrides total: 6–10 charcoal/smoke neutrals,
 1–2 accent ramps (3 steps each), and the 6 app-mode go/stop tokens.
 
+## How the cascade works (and why you only override the palette)
+
+The frontend uses a two-step cascade:
+
+- **Palette layer** declares raw color ramps at `:root` (e.g.
+  `--color-charcoal-800: #171718`).
+- **Semantic layer** declares semantic tokens that reference the palette,
+  with different references in `:root` (light mode) and `.dark-theme`
+  (dark mode). For example: `.dark-theme { --base-background:
+  var(--color-charcoal-800) }` vs `:root { --base-background:
+  var(--color-white) }`.
+
+When the user toggles light/dark, the *semantic tokens* swap which
+palette ramp they read from. So:
+
+- A palette override of `--color-charcoal-800` automatically applies in
+  **dark mode** (every semantic token in `.dark-theme` resolves to the
+  new value) and is **invisible in light mode** (light-mode semantic
+  tokens read `smoke-*` instead).
+- A palette override of `--color-smoke-800` is the mirror: visible in
+  light mode, invisible in dark.
+
+**Always override at the palette layer, never the semantic layer.** This
+is why the user's existing dark/light toggle keeps working through your
+theme.
+
+Practical consequence:
+
+- Theme intended for **dark mode** → override the `charcoal-*` ramp.
+- Theme intended for **light mode** → override the `smoke-*` ramp.
+- Theme that should work in both → override both.
+
+Accents (`coral`, `gold`, `jade`, `azure`, `magenta`, `ocean`) and
+app-mode tokens are mode-independent — overrides apply everywhere.
+
 ## Design heuristics
 
 - **Contrast first.** Background-to-foreground luminance ratio should
@@ -84,6 +119,29 @@ Most themes only need ~20 overrides total: 6–10 charcoal/smoke neutrals,
   `app-mode-stop-*` to non-red is allowed but warn the user it weakens
   the safety affordance.
 
+## Minimum viable override set
+
+For most themes, twelve to twenty overrides is enough. Anchor on this
+shape and only deviate when the user's request demands more.
+
+**Dark-mode theme (~17 tokens):**
+
+- `color-charcoal-100` through `color-charcoal-800` — all 8 steps of the
+  neutral spine.
+- One accent ramp, all steps. For example `color-azure-300/400/600`,
+  or `color-magenta-300/700`, or `color-coral-500/600/700`.
+- All six `app-mode-go-*` and `app-mode-stop-*` tokens.
+
+**Light-mode theme (~17 tokens):**
+
+- `color-smoke-100` through `color-smoke-800` — 8 steps.
+- `color-white` if the base background should not be pure white.
+- One accent ramp.
+- All six app-mode tokens.
+
+Going past ~20 overrides usually re-introduces the inconsistencies the
+design system was built to prevent.
+
 ## Failure modes to avoid
 
 - Don't include `--` in token names passed to `write_comfyui_theme`.
@@ -97,13 +155,42 @@ Most themes only need ~20 overrides total: 6–10 charcoal/smoke neutrals,
 
 **User:** "Give me a deep ocean theme — dark, cool, with cyan accents."
 
-**Plan:**
+**Decisions:**
 
-- Mode: dark.
+- Mode: dark → override `charcoal-*`, leave `smoke-*` alone.
 - Scheme: monochromatic blue-green with cyan accent.
-- Charcoal ramp: shift toward a slight blue undertone (desaturated navy).
-- Azure ramp: re-tune toward true cyan.
-- App-mode go: cool teal; stop: muted coral so it still reads as warning.
+- Charcoal ramp: shift toward a navy undertone (slight desaturation).
+- Azure ramp: re-tune toward true cyan, brighter highlights.
+- App-mode go: cool teal (reads as "go" without competing with the cyan
+  accent); stop: warm coral so it still reads as warning.
 
-Then call `write_comfyui_theme(name="deep-ocean", overrides={…})` followed
-by `apply_comfyui_theme(name="deep-ocean")`.
+**Tool call:**
+
+    write_comfyui_theme(
+      name="deep-ocean",
+      overrides={
+        "color-charcoal-100": "#5a6e80",
+        "color-charcoal-200": "#4a5e72",
+        "color-charcoal-300": "#3d5163",
+        "color-charcoal-400": "#324453",
+        "color-charcoal-500": "#293645",
+        "color-charcoal-600": "#1f2c39",
+        "color-charcoal-700": "#16222e",
+        "color-charcoal-800": "#0c1620",
+        "color-azure-300": "#7df9ff",
+        "color-azure-400": "#00d4ff",
+        "color-azure-600": "#00a3cc",
+        "app-mode-go-bg": "#00b894",
+        "app-mode-go-bg-hover": "#00d2a8",
+        "app-mode-go-border": "#007a64",
+        "app-mode-stop-bg": "#ff6b6b",
+        "app-mode-stop-bg-hover": "#ff8585",
+        "app-mode-stop-border": "#cc3333",
+      }
+    )
+
+Then `apply_comfyui_theme(name="deep-ocean")`, then summarize:
+
+> Applied a deep-ocean dark theme: navy-shifted neutrals, cyan accent
+> ramp, teal Run / coral Stop. Vite HMR should refresh the browser. Say
+> "warmer", "more saturation", or "more contrast" to iterate.
