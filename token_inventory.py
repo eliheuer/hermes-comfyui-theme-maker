@@ -1,13 +1,9 @@
-"""Canonical inventory of ComfyUI frontend CSS tokens that the theme maker can override.
+"""Canonical inventory of ComfyUI_frontend CSS tokens the theme maker overrides.
 
-Mapped from these source files in ComfyUI_frontend:
-- packages/design-system/src/css/_palette.css       (palette layer)
-- packages/design-system/src/css/style.css          (extended palette + layout)
-- src/assets/css/style.css   (app-mode layer; PR app-mode-semi-customizable-layout)
-
-Overriding the palette layer cascades through every semantic token wired up by
-the design system. The app-mode layer must be overridden separately because it
-hard-codes hex values pending the theme system redesign.
+Sourced from:
+  packages/design-system/src/css/_palette.css       (palette layer)
+  packages/design-system/src/css/style.css          (extended palette + layout)
+  src/assets/css/style.css                          (app-mode layer, PR #11317)
 """
 
 # Layer 1: foundational palette ramps from _palette.css.
@@ -105,7 +101,6 @@ _LAYERS = {
 
 
 def all_tokens():
-    """Flat list of (name, default, description, layer) for every overridable token."""
     out = []
     for layer_name, rows in _LAYERS.items():
         for name, default, desc in rows:
@@ -114,7 +109,6 @@ def all_tokens():
 
 
 def by_layer(layer: str):
-    """Return rows for one layer. Raises KeyError if the layer name is unknown."""
     return list(_LAYERS[layer])
 
 

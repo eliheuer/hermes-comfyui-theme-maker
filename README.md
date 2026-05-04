@@ -10,45 +10,38 @@ Built for the Hermes Agent Creative Hackathon. Still rough around the edges.
 
 ## What it does
 
-- A **skill** (`comfyui-theme-maker`) that loads the canonical ComfyUI token
-  taxonomy and design heuristics into Hermes' context.
-- Seven **tools** the agent calls in an agentic loop:
-  - `list_comfyui_tokens` — return every overridable CSS custom property.
-  - `generate_mood_image` — generate a reference image via your local
-    ComfyUI text-to-image stack to anchor palette decisions in real
-    pixels rather than guessed colors.
-  - `extract_palette_from_image` — median-cut quantization on the
-    reference image, returns dominant hex colors with weights.
-  - `write_comfyui_theme` — write a theme file to your ComfyUI_frontend
-    checkout.
-  - `apply_comfyui_theme` — activate the theme via a single `@import`,
-    picked up by Vite HMR.
-  - `render_theme_swatch` — render a theme as ANSI-colored blocks in
-    the terminal, grouped by category. The agent calls this after
-    apply so each generation ends with a visual preview in your TUI.
-  - `render_theme_image` — render a 1080×1080 PNG infographic of the
-    theme (charcoal-ramp stripe + every token grouped into labeled
-    sections). On-request only, e.g. for social-media sharing.
-- Targets the three-layer token surface: **palette** (foundational color
-  ramps), **semantic** (cascades automatically), and the new **app-mode**
-  tokens introduced by ComfyUI_frontend PR #11317
-  (`app-mode-semi-customizable-layout`).
+A skill (`comfyui-theme-maker`) that loads the canonical ComfyUI token
+taxonomy plus design heuristics into Hermes' context, and seven tools
+the agent calls in an agentic loop:
+
+- `list_comfyui_tokens` — return every overridable CSS custom property.
+- `generate_mood_image` — generate a reference image via your local
+  ComfyUI text-to-image stack to anchor palette decisions in real
+  pixels rather than guessed colors.
+- `extract_palette_from_image` — median-cut quantization on the
+  reference image; returns dominant hex colors with weights.
+- `write_comfyui_theme` — write a theme file to your ComfyUI_frontend
+  checkout.
+- `apply_comfyui_theme` — activate the theme via a single `@import`,
+  picked up by Vite HMR.
+- `render_theme_swatch` — ANSI-colored TUI preview of a theme, grouped
+  by category. Called automatically after every apply.
+- `render_theme_image` — 1080×1080 PNG infographic of a theme. On
+  request only (e.g. for sharing).
+
+The plugin targets ComfyUI_frontend's three-layer token surface:
+**palette** (foundational color ramps), **semantic** (cascades
+automatically), and the new **app-mode** tokens introduced by PR
+[#11317](https://github.com/Comfy-Org/ComfyUI_frontend/pull/11317).
 
 ## Stack
 
-Three pieces, run roughly independently:
-
-- **Hermes Agent** — drives the conversation, plans the agentic loop,
-  calls this plugin's tools. Any LLM backend that hermes-agent supports
-  works (cloud or local). Cloud is the recommended path; local needs
-  enough memory headroom to coexist with ComfyUI.
-- **ComfyUI** — runs locally on your GPU. Generates the mood reference
-  image (the visual research) and hosts the frontend you re-skin.
+- **Hermes Agent** — drives the conversation, plans the loop. Any LLM
+  backend hermes-agent supports works (cloud or local).
+- **ComfyUI** — runs locally; generates the mood reference image and
+  hosts the frontend you re-skin.
 - **ComfyUI_frontend** — your dev checkout running `pnpm dev`. Vite HMR
-  applies theme changes live in the browser.
-
-This plugin is the glue: a Hermes Agent **skill** (design knowledge for
-the LLM) plus five **tools** the agent calls in order.
+  applies theme changes live.
 
 ## Setup
 
@@ -61,26 +54,15 @@ source ~/.zshrc  # or ~/.bashrc
 
 ### 2. Pick an LLM backend
 
-Run `hermes model` and walk through the interactive wizard. Any provider
-hermes-agent supports works as long as the model can do structured tool
-calling. Two paths:
+Run `hermes model` and walk the wizard. Any tool-calling-capable model
+hermes-agent supports works.
 
-**Cloud (recommended)** — fast, no local memory cost, works anywhere:
+**Cloud (recommended)** — pick a provider you have credit on (Kimi/
+Moonshot, Nous Portal, OpenRouter, etc.) and a model. Verified working:
+**Kimi-K2** (Moonshot).
 
-- Pick a provider you have credit on: Kimi/Moonshot, Nous Portal,
-  OpenRouter, OpenAI, Anthropic, etc.
-- Pick a tool-calling-capable model when prompted. Verified working
-  during development: **Kimi-K2** (Moonshot). Larger Hermes models on
-  Nous Portal also work.
-- Set as default.
-
-**Local (advanced)** — runs on your machine, no API calls, but needs
-real memory headroom. On a 48 GB Apple Silicon Mac with ComfyUI also
-loaded, even the 14B Hermes variant runs into peak-memory pressure
-during prompt processing. Reach for this only if you have ≥ 64 GB
-unified memory, or are willing to stop ComfyUI between turns.
-
-To run local:
+**Local (advanced)** — needs ≥ 64 GB unified memory to coexist with
+ComfyUI; even 14B Hermes is memory-tight on 48 GB.
 
 ```bash
 brew install llama.cpp
@@ -93,19 +75,15 @@ curl -L --fail -C - --retry 5 \
 llama-server \
     --model ~/models/hermes-4-14b/NousResearch_Hermes-4-14B-Q4_K_M.gguf \
     --alias Hermes-4-14B-Q4 \
-    --ctx-size 65536 \
-    -ngl 999 \
-    --host 127.0.0.1 \
-    --port 8080 \
-    --jinja \
-    --cache-type-k q8_0 \
-    --cache-type-v q8_0
+    --ctx-size 65536 -ngl 999 --jinja \
+    --cache-type-k q8_0 --cache-type-v q8_0 \
+    --host 127.0.0.1 --port 8080
 ```
 
-Then in `hermes model`, pick **Custom Endpoint**, base URL
+In `hermes model`: pick **Custom Endpoint**, base URL
 `http://127.0.0.1:8080/v1`, model name `Hermes-4-14B-Q4`, API key
-anything. The Hermes-4-14B GGUF reports a 40 K context in its metadata
-which is below hermes-agent's 64 K minimum, so:
+anything. The 14B GGUF reports 40 K context (below hermes-agent's 64 K
+minimum); override after the wizard:
 
 ```bash
 hermes config set model.context_length 65536
@@ -115,20 +93,16 @@ hermes config set auxiliary.compression.context_length 65536
 ### 3. Install this plugin
 
 ```bash
-# Clone wherever you keep code. The plugin will be referenced by
-# absolute path from the symlink below, so the location doesn't matter.
 git clone https://github.com/eliheuer/hermes-comfyui-theme-maker.git
 cd hermes-comfyui-theme-maker
 
 # Hermes plugin dirs must be valid Python identifiers — symlink with underscores.
 mkdir -p ~/.hermes/plugins
 ln -s "$(pwd)" ~/.hermes/plugins/hermes_comfyui_theme_maker
-
-# Hermes discovers plugins but won't load them until you enable.
 hermes plugins enable hermes_comfyui_theme_maker
 ```
 
-Verify the plugin loaded:
+Verify:
 
 ```bash
 hermes plugins list | grep hermes_comfyui_theme_maker  # status: enabled
@@ -137,53 +111,23 @@ hermes tools list   | grep comfyui-theme-maker         # 7 tools
 
 ### 4. Install runtime dependencies into hermes-agent's venv
 
-Two tools have Python dependencies (Pillow for palette extraction,
-drawbot-skia for PNG rendering). They go into **hermes-agent's own
-venv** — not your shell's `pip`, not a project venv. Use the full path:
+Pillow + drawbot-skia. Use the **full path** to hermes-agent's pip;
+shell `pip` installs into the wrong Python:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/pip install -r requirements.txt
-```
-
-> ⚠ **Common mistake**: running plain `pip install -r requirements.txt`
-> from your shell installs into your system Python (or whatever venv is
-> active in your shell), which is **not** where Hermes loads the plugin
-> from. The full path above is the only one that works.
-
-Verify the install reached the right Python:
-
-```bash
 ~/.hermes/hermes-agent/venv/bin/python -c "import PIL, drawbot_skia; print('ok')"
 ```
 
-You should see `ok`. If you see `ModuleNotFoundError`, you installed
-into the wrong Python — re-run the install with the full path.
-
-The plugin loads cleanly even without these deps (they're imported
-lazily), so `hermes plugins enable` works regardless. Only the two
-tools that need them — `extract_palette_from_image` and
-`render_theme_image` — will return a clear error until installed.
+The plugin imports these lazily, so it loads regardless — only the two
+tools that need them error until installed.
 
 ### 5. Tell the agent where your ComfyUI_frontend lives
 
-There's no env var or config to set up — the agent just asks. On the
-first theme request of a session, Hermes will say something like:
-
-> Where is your ComfyUI_frontend checkout? e.g. `~/code/ComfyUI_frontend`
-
-Tell it the absolute path. The agent saves it to memory for future
-sessions, so you only get asked once per machine.
-
-> **Scope note:** this plugin currently targets a **dev checkout** of
-> ComfyUI_frontend (the source tree you'd run `pnpm dev` against), not
-> a regular installed ComfyUI's bundled production UI. Themes apply
-> via Vite HMR on the dev server. Skinning a non-dev ComfyUI install
-> would need to plug into ComfyUI's runtime CSS injection mechanism
-> instead — that's a future direction.
+The agent asks on its first theme request and saves the answer to
+memory; you only get asked once per machine.
 
 ### 6. Start ComfyUI_frontend
-
-In a separate terminal:
 
 ```bash
 cd /path/to/ComfyUI_frontend
@@ -196,122 +140,62 @@ pnpm dev
 hermes
 ```
 
-Then in the chat:
+In the chat:
 
 ```
-> Use the comfyui-theme-maker skill to make me a warm campfire theme.
-  Use the visual-research workflow: generate a mood image first,
-  extract its palette, then write and apply the theme.
+> Make me a warm campfire theme for ComfyUI's frontend.
 ```
 
-Hermes will run the agentic loop:
+The agent grounds itself, calls `generate_mood_image` (~15-25 s of
+ComfyUI work), extracts a palette, maps it onto ramps, writes and
+applies the theme, then renders the ANSI swatch. Vite HMR live-reloads
+the browser. Iterate by saying "warmer", "less saturated", etc. — the
+agent rewrites and re-applies without regenerating the reference.
 
-1. Call `list_comfyui_tokens` to ground itself in the real token surface.
-2. Plan a mood prompt for the diffusion model.
-3. Call `generate_mood_image(...)` — ComfyUI generates a reference PNG
-   via your installed text-to-image stack (~15-25 s).
-4. Call `extract_palette_from_image(...)` — median-cut quantization
-   returns the dominant colors with weights.
-5. Map extracted colors onto ramps using the design heuristics in
-   `SKILL.md` (dark anchors → `charcoal-*`, warm accents → `coral-*`
-   or `gold-*`, etc.) and call
-   `write_comfyui_theme(name=…, overrides=…)`.
-6. Call `apply_comfyui_theme(name=…)`.
+If ComfyUI is unreachable or the workflow fails, the agent falls back
+to text-only theme generation.
 
-Vite HMR live-reloads the browser. Iterate by saying "make it warmer"
-or "less saturated" — Hermes will rewrite and re-apply without
-re-generating the reference image.
-
-If ComfyUI isn't running or image generation fails, Hermes falls back
-to text-only theme generation and tells you so in the summary.
+`apply_comfyui_theme` modifies your tracked
+`src/assets/css/style.css`. To revert: `git restore src/assets/css/style.css`.
 
 ## Examples
 
-`examples/` contains hand-designed reference themes you can apply
-directly without running Hermes — useful as known-good baselines to
-compare against LLM output, or for offline preview.
-
-- [`campfire.css`](./examples/campfire.css) — warm dark theme. Charcoal
-  ramp shifted to burnt-wood browns, coral and gold ramps tuned to ember
-  oranges and amber yellows, forest-green Run / warm-red Stop.
-
-To apply one manually:
+[`examples/campfire.css`](./examples/campfire.css) is a hand-designed
+warm-dark reference theme. Drop it directly into your themes dir to
+preview without running the agent:
 
 ```bash
-cp examples/campfire.css \
-   "$HERMES_COMFYUI_FRONTEND_PATH/src/assets/css/themes/"
+cp examples/campfire.css "$HERMES_COMFYUI_FRONTEND_PATH/src/assets/css/themes/"
 ```
-
-Then in `hermes`: `apply_comfyui_theme(name="campfire")`. Or add the
-`@import` line to `style.css` by hand.
-
-## How it works
-
-ComfyUI_frontend exposes a clean three-layer CSS custom-property system:
-
-1. **Palette** (`_palette.css`) — raw color ramps (`charcoal-*`,
-   `smoke-*`, etc.).
-2. **Semantic** (`design-system/style.css`) — semantic tokens that
-   reference the palette (`base-foreground`, `secondary-background`, …).
-3. **App-mode** (`src/assets/css/style.css`) — local tokens for the new
-   App Mode redesign (`--app-mode-go-*`, `--app-mode-widget-*`).
-
-This plugin emits a single `theme.css` file that overrides tokens at the
-palette and app-mode layers. The semantic layer cascades automatically.
-`apply` injects one `@import` line into `style.css` between sentinel
-comments — idempotent, removable, single source of truth.
-
-> **Heads up:** `apply_comfyui_theme` modifies your tracked
-> `src/assets/css/style.css`. To revert: `git restore
-> src/assets/css/style.css`.
 
 ## Tested against
 
-- **LLM backend**: Kimi-K2 (Moonshot, cloud) — verified working
-  end-to-end during the hackathon. Local Hermes-4-14B GGUF also runs
-  but is memory-tight alongside ComfyUI on 48 GB hardware.
-- **ComfyUI image gen**: the workflow template wired into `tools.py`
-  targets the **Anima / Qwen** text-to-image stack
-  (`anima-preview.safetensors`, `qwen_3_06b_base.safetensors`,
-  `qwen_image_vae.safetensors`, `anima-turbo-lora-v0.1.safetensors`).
-  Other ComfyUI installs (Flux, SDXL, etc.) would need the workflow
-  template swapped — generalising this is future work.
+- **LLM**: Kimi-K2 (cloud), verified end-to-end. Local
+  Hermes-4-14B GGUF runs but is memory-tight alongside ComfyUI on 48 GB.
+- **ComfyUI image gen**: the workflow template in `tools.py` targets
+  the **Anima / Qwen** stack (`anima-preview.safetensors`,
+  `qwen_3_06b_base.safetensors`, `qwen_image_vae.safetensors`,
+  `anima-turbo-lora-v0.1.safetensors`). Other installs (Flux, SDXL,
+  etc.) would need the workflow swapped — future work.
 - **ComfyUI_frontend**: `main` and PR #11317 branch
-  `app-mode-semi-customizable-layout` in graph mode, app mode, and
-  builder mode.
+  `app-mode-semi-customizable-layout` in graph, app, and builder mode.
 
 ## Development
 
-If you want to hack on the plugin, run the smoke test, or otherwise
-work inside the repo, use a **project-local venv** kept entirely
-separate from hermes-agent's:
-
 ```bash
-# At the repo root. .venv/ is gitignored.
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-
-# The smoke test takes the frontend path via env var (since there's
-# no human in the loop to ask). Point it at any ComfyUI_frontend
-# checkout you have.
 HERMES_COMFYUI_FRONTEND_PATH=/path/to/ComfyUI_frontend \
     .venv/bin/python scripts/smoke_test.py
 ```
 
-The smoke test exercises every tool against a real frontend and
-reverts all writes on exit (idempotent — safe to run repeatedly,
-abort with Ctrl+C is handled). 21 checks; 0 failures = green light.
-
-The project `.venv` and hermes-agent's venv are independent; deps in
-`requirements.txt` need to land in both for the corresponding code
-paths (smoke test in project `.venv`, agent runtime in
-hermes-agent's venv).
+21 checks; reverts style.css on exit. `.venv/` is gitignored.
 
 ## Project documentation
 
 - [`PLAN.md`](./PLAN.md) — vision and load-bearing design decisions.
 - [`docs/architecture.md`](./docs/architecture.md) — component map,
-  data flow, file layout, integration points, failure modes.
+  data flow, integration points, failure modes.
 
 ## License
 

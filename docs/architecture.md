@@ -24,6 +24,8 @@ How the pieces fit, what owns what, and where the boundaries are.
        │  │                  │   │   extract_palette    │  │
        │  │                  │   │   write_…_theme      │  │
        │  │                  │   │   apply_…_theme      │  │
+       │  │                  │   │   render_…_swatch    │  │
+       │  │                  │   │   render_…_image     │  │
        │  └──────────────────┘   └──────┬───────────────┘  │
        │                                │                  │
        │  token_inventory.py · schemas.py                  │
@@ -78,27 +80,6 @@ re-applies without regenerating the reference image.
 If ComfyUI is unreachable or generation fails, the agent skips visual
 research and picks palette anchors from the description alone.
 
-## File layout
-
-```
-hermes-comfyui-theme-maker/
-├── README.md                    user-facing setup + usage
-├── PLAN.md                      vision + decisions
-├── LICENSE                      GPL-3.0
-├── plugin.yaml                  Hermes plugin manifest
-├── __init__.py                  register(ctx) — entry point
-├── schemas.py                   JSON schemas describing tools to LLM
-├── tools.py                     tool implementations (5)
-├── token_inventory.py           canonical CSS token inventory
-├── docs/architecture.md         this file
-├── skills/comfyui-theme-maker/
-│   └── SKILL.md                 design knowledge for the LLM
-├── examples/
-│   └── campfire.css             hand-designed reference theme
-└── scripts/
-    └── smoke_test.py            end-to-end verification
-```
-
 ## Integration points
 
 **Hermes plugin model.** Plugin discovered at
@@ -128,7 +109,7 @@ active at a time. Vite dev server picks up both files via HMR.
 | Workflow rejected | non-200 from `/prompt` | Echo `node_errors`; same fallback. |
 | Generation timeout | poll exceeds 90 s | Error; same fallback. |
 | `frontend_path` missing or wrong | no `src/assets/css/style.css` | Error naming the offending path. |
-| Pillow not installed | ImportError at runtime | Error pointing at `pip install Pillow`. |
+| Pillow / drawbot-skia missing | lazy `ImportError` | Error pointing at `requirements.txt` install command. |
 
 The image-gen path is **optional research**: text-only generation must
 always work; visual research enriches when available.

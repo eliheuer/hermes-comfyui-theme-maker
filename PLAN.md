@@ -25,26 +25,6 @@ Each piece does what it's strongest at:
   design heuristics live in `SKILL.md` so the LLM doesn't have to
   rediscover them per turn.
 
-## What's built
-
-- One **skill** (`comfyui-theme-maker`) with the design knowledge.
-- Five **tools** the agent calls in an agentic loop:
-  - `list_comfyui_tokens` — enumerate every overridable CSS custom
-    property the theme can target.
-  - `generate_mood_image` — submit a parameterized Anima/Qwen workflow
-    to local ComfyUI's HTTP API; poll, fetch, cache the resulting PNG.
-  - `extract_palette_from_image` — median-cut quantization via Pillow
-    returns dominant hex colors with weights.
-  - `write_comfyui_theme` — render `:root { --token: value; }` CSS
-    into the user's ComfyUI_frontend checkout.
-  - `apply_comfyui_theme` — inject one `@import` into the frontend's
-    main `style.css` between sentinel comments. Idempotent; one theme
-    active at a time. Vite HMR live-reloads the browser.
-- A hand-designed reference theme (`examples/campfire.css`) usable
-  directly without the agent — handy as a known-good baseline.
-- A smoke test exercising the I/O tools end-to-end against a real
-  ComfyUI_frontend (17 checks).
-
 ## Load-bearing decisions
 
 ### Cloud LLM is the practical path
@@ -84,8 +64,7 @@ semantic layer.
 Letting the LLM guess colors from a description uses ComfyUI as a
 passive host. Generating a real image and extracting its palette uses
 ComfyUI's actual strength. Themes feel coherent because they have a
-visual *source*; the agentic loop grows naturally — plan, call tools,
-read results, call more tools.
+visual *source*; the agentic loop grows naturally.
 
 ### `frontend_path` as an explicit tool argument
 
