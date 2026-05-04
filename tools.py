@@ -525,8 +525,14 @@ def render_theme_image(args: dict, **kwargs) -> str:
     except ImportError:
         return json.dumps(
             {
-                "error": "drawbot-skia not installed; "
-                "pip install drawbot-skia in the hermes-agent venv"
+                "error": (
+                    "drawbot-skia is not installed in hermes-agent's venv. "
+                    "From a shell, run:\n"
+                    "  ~/.hermes/hermes-agent/venv/bin/pip install "
+                    "-r requirements.txt\n"
+                    "(Use the full path — running plain `pip install` will "
+                    "install into the wrong Python.)"
+                )
             }
         )
 
@@ -649,8 +655,14 @@ def extract_palette_from_image(args: dict, **kwargs) -> str:
     except ImportError:
         return json.dumps(
             {
-                "error": "Pillow not installed; "
-                "pip install Pillow in the hermes-agent venv"
+                "error": (
+                    "Pillow is not installed in hermes-agent's venv. "
+                    "From a shell, run:\n"
+                    "  ~/.hermes/hermes-agent/venv/bin/pip install "
+                    "-r requirements.txt\n"
+                    "(Use the full path — running plain `pip install` will "
+                    "install into the wrong Python.)"
+                )
             }
         )
 

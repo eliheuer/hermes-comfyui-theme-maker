@@ -124,27 +124,47 @@ cd hermes-comfyui-theme-maker
 mkdir -p ~/.hermes/plugins
 ln -s "$(pwd)" ~/.hermes/plugins/hermes_comfyui_theme_maker
 
-# Hermes discovers plugins in this directory but won't load them until
-# you explicitly enable them.
+# Hermes discovers plugins but won't load them until you enable.
 hermes plugins enable hermes_comfyui_theme_maker
 ```
 
-Verify it loaded with `hermes plugins list` (status should be
-`enabled`), `hermes skills list` (should include `comfyui-theme-maker`), and
-`hermes tools list` (should include all seven tools above).
+Verify the plugin loaded:
 
-Two of the tools have runtime Python dependencies (`Pillow` for palette
-extraction, `drawbot-skia` for the 1080×1080 infographic render). Install
-them into hermes-agent's venv:
+```bash
+hermes plugins list | grep hermes_comfyui_theme_maker  # status: enabled
+hermes tools list   | grep comfyui-theme-maker         # 7 tools
+```
+
+### 4. Install runtime dependencies into hermes-agent's venv
+
+Two tools have Python dependencies (Pillow for palette extraction,
+drawbot-skia for PNG rendering). They go into **hermes-agent's own
+venv** — not your shell's `pip`, not a project venv. Use the full path:
 
 ```bash
 ~/.hermes/hermes-agent/venv/bin/pip install -r requirements.txt
 ```
 
-The plugin loads without these — they're imported lazily — but the two
-tools that need them will return a clear error until they're installed.
+> ⚠ **Common mistake**: running plain `pip install -r requirements.txt`
+> from your shell installs into your system Python (or whatever venv is
+> active in your shell), which is **not** where Hermes loads the plugin
+> from. The full path above is the only one that works.
 
-### 4. Tell the agent where your ComfyUI_frontend lives
+Verify the install reached the right Python:
+
+```bash
+~/.hermes/hermes-agent/venv/bin/python -c "import PIL, drawbot_skia; print('ok')"
+```
+
+You should see `ok`. If you see `ModuleNotFoundError`, you installed
+into the wrong Python — re-run the install with the full path.
+
+The plugin loads cleanly even without these deps (they're imported
+lazily), so `hermes plugins enable` works regardless. Only the two
+tools that need them — `extract_palette_from_image` and
+`render_theme_image` — will return a clear error until installed.
+
+### 5. Tell the agent where your ComfyUI_frontend lives
 
 There's no env var or config to set up — the agent just asks. On the
 first theme request of a session, Hermes will say something like:
@@ -161,7 +181,7 @@ sessions, so you only get asked once per machine.
 > would need to plug into ComfyUI's runtime CSS injection mechanism
 > instead — that's a future direction.
 
-### 5. Start ComfyUI_frontend
+### 6. Start ComfyUI_frontend
 
 In a separate terminal:
 
@@ -259,6 +279,33 @@ comments — idempotent, removable, single source of truth.
 - **ComfyUI_frontend**: `main` and PR #11317 branch
   `app-mode-semi-customizable-layout` in graph mode, app mode, and
   builder mode.
+
+## Development
+
+If you want to hack on the plugin, run the smoke test, or otherwise
+work inside the repo, use a **project-local venv** kept entirely
+separate from hermes-agent's:
+
+```bash
+# At the repo root. .venv/ is gitignored.
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+# The smoke test takes the frontend path via env var (since there's
+# no human in the loop to ask). Point it at any ComfyUI_frontend
+# checkout you have.
+HERMES_COMFYUI_FRONTEND_PATH=/path/to/ComfyUI_frontend \
+    .venv/bin/python scripts/smoke_test.py
+```
+
+The smoke test exercises every tool against a real frontend and
+reverts all writes on exit (idempotent — safe to run repeatedly,
+abort with Ctrl+C is handled). 21 checks; 0 failures = green light.
+
+The project `.venv` and hermes-agent's venv are independent; deps in
+`requirements.txt` need to land in both for the corresponding code
+paths (smoke test in project `.venv`, agent runtime in
+hermes-agent's venv).
 
 ## Project documentation
 
