@@ -10,9 +10,9 @@ homepage: https://github.com/eliheuer/hermes-comfyui-theme-maker
 
 provides:
   skills:
-    - comfyui-theme
+    - comfyui-theme-maker
   toolsets:
-    - comfyui-theme
+    - comfyui-theme-maker
   tools:
     - list_comfyui_tokens
     - write_comfyui_theme

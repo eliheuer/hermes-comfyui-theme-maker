@@ -31,7 +31,7 @@ Each tool is doing what it's strongest at:
 Target end-to-end flow when a user types something like *"make a
 campfire theme"* into a `hermes` chat:
 
-1. Hermes loads the `comfyui-theme` skill, reads the design knowledge
+1. Hermes loads the `comfyui-theme-maker` skill, reads the design knowledge
    and token taxonomy.
 2. Hermes calls `list_comfyui_tokens` to ground itself in the real
    override surface.
@@ -63,7 +63,7 @@ Three layers, ship in order. Each is independently demoable.
 
 - Plugin scaffold: `__init__.py`, `plugin.yaml`, `schemas.py`, `tools.py`,
   `token_inventory.py`.
-- Skill: `skills/comfyui-theme/SKILL.md` with token taxonomy, cascade
+- Skill: `skills/comfyui-theme-maker/SKILL.md` with token taxonomy, cascade
   rules, design heuristics, worked example.
 - Tools: `list_comfyui_tokens`, `write_comfyui_theme`,
   `apply_comfyui_theme`.

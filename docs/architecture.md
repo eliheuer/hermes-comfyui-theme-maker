@@ -139,7 +139,7 @@ hermes-comfyui-theme-maker/
 │   ├── architecture.md          # this file
 │   └── comfyui-api-notes.md     # ComfyUI HTTP API reference
 ├── skills/
-│   └── comfyui-theme/
+│   └── comfyui-theme-maker/
 │       └── SKILL.md             # design knowledge for the LLM
 ├── workflows/                   # (planned, layer 2)
 │   └── anima-turbo.json         # parameterized Anima/Qwen template
@@ -164,7 +164,7 @@ hermes-comfyui-theme-maker/
 - Tool handlers: `def handler(args: dict, **kwargs) -> str`. Always
   return a JSON string (success and error). Catch exceptions
   internally — never raise.
-- Toolset name (`comfyui-theme`) groups all five tools so the user can
+- Toolset name (`comfyui-theme-maker`) groups all five tools so the user can
   enable/disable them together via `hermes tools`.
 
 ### 2. ComfyUI HTTP API

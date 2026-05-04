@@ -8,7 +8,7 @@ Built for the Hermes Agent Creative Hackathon.
 
 ## What it does
 
-- A **skill** (`comfyui-theme`) that loads the canonical ComfyUI token
+- A **skill** (`comfyui-theme-maker`) that loads the canonical ComfyUI token
   taxonomy and design heuristics into Hermes' context.
 - Five **tools** the agent calls in an agentic loop:
   - `list_comfyui_tokens` — return every overridable CSS custom property.
@@ -122,7 +122,7 @@ hermes plugins enable hermes_comfyui_theme_maker
 ```
 
 Verify it loaded with `hermes plugins list` (status should be
-`enabled`), `hermes skills list` (should include `comfyui-theme`), and
+`enabled`), `hermes skills list` (should include `comfyui-theme-maker`), and
 `hermes tools list` (should include all five tools above).
 
 The plugin imports Pillow at runtime for palette extraction. If your
@@ -158,7 +158,7 @@ hermes
 Then in the chat:
 
 ```
-> Use the comfyui-theme skill to make me a warm campfire theme.
+> Use the comfyui-theme-maker skill to make me a warm campfire theme.
   Use the visual-research workflow: generate a mood image first,
   extract its palette, then write and apply the theme.
 ```

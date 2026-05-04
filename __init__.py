@@ -4,8 +4,8 @@ from pathlib import Path
 
 from . import schemas, tools
 
-SKILL_NAME = "comfyui-theme"
-TOOLSET = "comfyui-theme"
+SKILL_NAME = "comfyui-theme-maker"
+TOOLSET = "comfyui-theme-maker"
 
 
 def register(ctx):
