@@ -35,8 +35,8 @@ How the pieces fit, what owns what, and where the boundaries are.
              │                                    │
              │ writes / reads files               │ HTTP
              ▼                                    ▼
-   ~/Work/comfy/repos/                  http://127.0.0.1:8188
-   ComfyUI_frontend/                    (ComfyUI HTTP API)
+   <ComfyUI_frontend checkout>/         http://127.0.0.1:8188
+                                        (ComfyUI HTTP API)
      src/assets/css/                       /prompt
        style.css       (modified)          /history/<id>
        themes/<name>.css (written)         /view?...

@@ -8,8 +8,8 @@ hermes-agent installed.
 The script saves the original style.css contents up front and restores them
 in a finally block so it leaves no trace even if a check fails mid-run.
 
-Target frontend is HERMES_COMFYUI_FRONTEND_PATH or its default
-(~/Work/comfy/repos/ComfyUI_frontend).
+Target frontend is HERMES_COMFYUI_FRONTEND_PATH or whichever common
+location the plugin's auto-detect finds (see tools._frontend_path).
 
 Run from anywhere:
     python3 scripts/smoke_test.py
@@ -88,12 +88,9 @@ def _expect_error(payload: dict, msg: str) -> bool:
 
 
 def main() -> int:
-    frontend = Path(
-        os.environ.get(
-            "HERMES_COMFYUI_FRONTEND_PATH",
-            "~/Work/comfy/repos/ComfyUI_frontend",
-        )
-    ).expanduser()
+    # Reuse the plugin's own resolution so the smoke test exercises the
+    # same path-discovery the tools rely on.
+    frontend = tools._frontend_path()
     style = frontend / "src" / "assets" / "css" / "style.css"
     themes_dir = frontend / "src" / "assets" / "css" / "themes"
     smoke_a = themes_dir / "smoke-test.css"

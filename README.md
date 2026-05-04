@@ -149,11 +149,25 @@ hermes-agent venv doesn't already have it:
 
 ### 5. Point the plugin at your ComfyUI_frontend checkout
 
-The default is `~/Work/comfy/repos/ComfyUI_frontend`. Override with:
+The plugin auto-detects `ComfyUI_frontend` in common locations
+(`./ComfyUI_frontend`, `~/ComfyUI_frontend`, `~/comfy/ComfyUI_frontend`,
+`~/code/ComfyUI_frontend`, `~/dev/ComfyUI_frontend`,
+`~/src/ComfyUI_frontend`, `~/projects/ComfyUI_frontend`,
+`~/repos/ComfyUI_frontend`, `~/Documents/ComfyUI_frontend`). The first
+one that contains `src/assets/css/style.css` wins.
+
+If your checkout lives somewhere else, set the override:
 
 ```bash
 export HERMES_COMFYUI_FRONTEND_PATH=/path/to/your/ComfyUI_frontend
 ```
+
+> **Scope note:** this plugin currently targets a **dev checkout** of
+> ComfyUI_frontend (the source tree you'd run `pnpm dev` against), not
+> a regular installed ComfyUI's bundled production UI. Themes apply
+> via Vite HMR on the dev server. Skinning a non-dev ComfyUI install
+> would need to plug into ComfyUI's runtime CSS injection mechanism
+> instead — that's a future direction.
 
 ### 6. Start ComfyUI_frontend
 

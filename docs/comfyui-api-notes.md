@@ -23,7 +23,7 @@ There's also `WS /ws` for real-time progress events (`executing`,
 ComfyUI has two JSON shapes for the same graph:
 
 - **Workflow format** — what the UI saves in
-  `~/Work/comfy/repos/ComfyUI/user/default/workflows/*.json`. Has
+  `<ComfyUI install>/user/default/workflows/*.json`. Has
   `nodes` (with `pos`, `widgets_values`, `flags`), `links` (positional
   edge tuples), `groups`, viewport state. *This is for the UI.*
 - **Prompt format** — what `/prompt` accepts. A flat dict keyed by node
@@ -127,11 +127,11 @@ POST it. No string templating — manipulate as Python dict.
 
 ## Output location on disk
 
-ComfyUI writes generated images to its own output dir, default
-`~/Work/comfy/repos/ComfyUI/output/`. Our tool does **not** need to
-reach into that dir: we always go through `/view` over HTTP, save to
-our own cache. That keeps the tool location-agnostic and avoids
-coupling to ComfyUI's filesystem layout.
+ComfyUI writes generated images to its own output dir, by default
+`<ComfyUI install>/output/`. Our tool does **not** need to reach into
+that dir: we always go through `/view` over HTTP and save to our own
+cache. That keeps the tool location-agnostic and avoids coupling to
+ComfyUI's filesystem layout.
 
 ## Error surfaces worth catching
 
@@ -148,7 +148,7 @@ back to text-only theme generation per the skill instructions.
 
 ## References for future reading
 
-- ComfyUI HTTP API source — `~/Work/comfy/repos/ComfyUI/server.py`
+- ComfyUI HTTP API source — `<ComfyUI install>/server.py`
   (route definitions live near `add_routes`).
 - Workflow → prompt conversion happens in the frontend; for our
   purposes hand-converting once is simpler than reading that code.

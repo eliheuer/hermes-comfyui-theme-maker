@@ -16,12 +16,49 @@ from pathlib import Path
 from . import token_inventory as inventory
 
 
+_FRONTEND_MARKER = Path("src") / "assets" / "css" / "style.css"
+
+
+def _frontend_candidates() -> list[Path]:
+    """Common locations a ComfyUI_frontend dev checkout might live.
+
+    Used in priority order; the first one that contains the expected
+    `src/assets/css/style.css` marker file wins.
+    """
+    home = Path.home()
+    return [
+        Path.cwd() / "ComfyUI_frontend",
+        home / "ComfyUI_frontend",
+        home / "comfy" / "ComfyUI_frontend",
+        home / "Comfy" / "ComfyUI_frontend",
+        home / "code" / "ComfyUI_frontend",
+        home / "dev" / "ComfyUI_frontend",
+        home / "src" / "ComfyUI_frontend",
+        home / "projects" / "ComfyUI_frontend",
+        home / "repos" / "ComfyUI_frontend",
+        home / "Documents" / "ComfyUI_frontend",
+    ]
+
+
 def _frontend_path() -> Path:
-    raw = os.environ.get(
-        "HERMES_COMFYUI_FRONTEND_PATH",
-        "~/Work/comfy/repos/ComfyUI_frontend",
-    )
-    return Path(raw).expanduser()
+    """Resolve the ComfyUI_frontend checkout we write themes into.
+
+    Resolution order:
+      1. HERMES_COMFYUI_FRONTEND_PATH env var (explicit override).
+      2. The first candidate from _frontend_candidates() whose
+         `src/assets/css/style.css` exists.
+
+    If neither matches, returns the first candidate so downstream code's
+    existence check produces a clear "not found" error referencing a
+    real path.
+    """
+    env = os.environ.get("HERMES_COMFYUI_FRONTEND_PATH")
+    if env:
+        return Path(env).expanduser()
+    for candidate in _frontend_candidates():
+        if (candidate / _FRONTEND_MARKER).exists():
+            return candidate
+    return _frontend_candidates()[0]
 
 
 def _themes_dir() -> Path:
