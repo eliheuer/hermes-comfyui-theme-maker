@@ -86,6 +86,13 @@ Before the first theme of any session:
    trade-offs. The user can then iterate ("warmer", "less saturated",
    "more contrast").
 
+If the user later asks for a **shareable image / social-media version /
+infographic** of the theme, call `render_theme_image(name=…,
+frontend_path=…)`. It writes a 1080×1080 PNG to
+`~/.cache/hermes-comfyui-theme-maker/<name>.png` (or a path the user
+specified) and returns the file path. Don't call this as part of the
+default loop — only on explicit request.
+
 ### Fallback workflow — text-only
 
 If `generate_mood_image` returns an `error` field, do **not** retry

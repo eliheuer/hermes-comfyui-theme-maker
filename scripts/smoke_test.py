@@ -311,6 +311,39 @@ def main() -> int:
         )
         _expect_error(payload, "rejects missing theme file")
 
+        _label("render_theme_image(valid)")
+        out_image = Path("~/Temp/smoke-test-image.png").expanduser()
+        out_image.unlink(missing_ok=True)
+        payload = json.loads(
+            tools.render_theme_image(
+                {
+                    "name": "smoke-test-2",
+                    "frontend_path": str(frontend),
+                    "output_path": str(out_image),
+                }
+            )
+        )
+        if (
+            payload.get("ok")
+            and payload.get("size") == "1080x1080"
+            and out_image.exists()
+            and out_image.stat().st_size > 1000
+        ):
+            _ok(
+                f"wrote {out_image.stat().st_size} bytes to {out_image}"
+            )
+        else:
+            _bad(f"unexpected image payload: {payload!r}")
+        out_image.unlink(missing_ok=True)
+
+        _label("render_theme_image(missing theme)")
+        payload = json.loads(
+            tools.render_theme_image(
+                {"name": "does-not-exist", "frontend_path": str(frontend)}
+            )
+        )
+        _expect_error(payload, "rejects missing theme file")
+
     finally:
         print("\n[cleanup] reverting style.css and removing test theme files")
         style.write_text(style_before)

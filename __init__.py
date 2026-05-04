@@ -48,3 +48,9 @@ def register(ctx):
         schema=schemas.RENDER_THEME_SWATCH,
         handler=tools.render_theme_swatch,
     )
+    ctx.register_tool(
+        name="render_theme_image",
+        toolset=TOOLSET,
+        schema=schemas.RENDER_THEME_IMAGE,
+        handler=tools.render_theme_image,
+    )

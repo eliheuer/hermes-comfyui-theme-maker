@@ -1,0 +1,13 @@
+# Runtime dependencies for the plugin's tools.
+# Install into hermes-agent's venv:
+#   ~/.hermes/hermes-agent/venv/bin/pip install -r requirements.txt
+#
+# For local development (running scripts/smoke_test.py against the .venv
+# at the repo root):
+#   .venv/bin/pip install -r requirements.txt
+
+# extract_palette_from_image — median-cut quantization
+Pillow>=10.0
+
+# render_theme_image — 1080x1080 PNG infographic
+drawbot-skia>=0.4

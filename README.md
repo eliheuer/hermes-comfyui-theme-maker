@@ -12,7 +12,7 @@ Built for the Hermes Agent Creative Hackathon. Still rough around the edges.
 
 - A **skill** (`comfyui-theme-maker`) that loads the canonical ComfyUI token
   taxonomy and design heuristics into Hermes' context.
-- Six **tools** the agent calls in an agentic loop:
+- Seven **tools** the agent calls in an agentic loop:
   - `list_comfyui_tokens` — return every overridable CSS custom property.
   - `generate_mood_image` — generate a reference image via your local
     ComfyUI text-to-image stack to anchor palette decisions in real
@@ -26,6 +26,9 @@ Built for the Hermes Agent Creative Hackathon. Still rough around the edges.
   - `render_theme_swatch` — render a theme as ANSI-colored blocks in
     the terminal, grouped by category. The agent calls this after
     apply so each generation ends with a visual preview in your TUI.
+  - `render_theme_image` — render a 1080×1080 PNG infographic of the
+    theme (charcoal-ramp stripe + every token grouped into labeled
+    sections). On-request only, e.g. for social-media sharing.
 - Targets the three-layer token surface: **palette** (foundational color
   ramps), **semantic** (cascades automatically), and the new **app-mode**
   tokens introduced by ComfyUI_frontend PR #11317
@@ -128,14 +131,18 @@ hermes plugins enable hermes_comfyui_theme_maker
 
 Verify it loaded with `hermes plugins list` (status should be
 `enabled`), `hermes skills list` (should include `comfyui-theme-maker`), and
-`hermes tools list` (should include all five tools above).
+`hermes tools list` (should include all seven tools above).
 
-The plugin imports Pillow at runtime for palette extraction. If your
-hermes-agent venv doesn't already have it:
+Two of the tools have runtime Python dependencies (`Pillow` for palette
+extraction, `drawbot-skia` for the 1080×1080 infographic render). Install
+them into hermes-agent's venv:
 
 ```bash
-~/.hermes/hermes-agent/venv/bin/pip install Pillow
+~/.hermes/hermes-agent/venv/bin/pip install -r requirements.txt
 ```
+
+The plugin loads without these — they're imported lazily — but the two
+tools that need them will return a clear error until they're installed.
 
 ### 4. Tell the agent where your ComfyUI_frontend lives
 

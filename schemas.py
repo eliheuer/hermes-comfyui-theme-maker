@@ -150,6 +150,48 @@ GENERATE_MOOD_IMAGE = {
     },
 }
 
+RENDER_THEME_IMAGE = {
+    "name": "render_theme_image",
+    "description": (
+        "Render a previously-written theme as a 1080x1080 PNG infographic "
+        "suitable for social-media sharing or design review. Shows the "
+        "theme name, a charcoal-ramp visual stripe, and every token "
+        "grouped into labeled sections. Call this only when the user "
+        "explicitly asks for an image / shareable output / social-media "
+        "version — not as part of the default theme-generation loop. "
+        "Returns the saved image's path."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": (
+                    "Theme slug previously passed to write_comfyui_theme."
+                ),
+            },
+            "frontend_path": {
+                "type": "string",
+                "description": (
+                    "Same ComfyUI_frontend checkout path used in "
+                    "write_comfyui_theme."
+                ),
+            },
+            "output_path": {
+                "type": "string",
+                "description": (
+                    "Optional absolute path (or '~/...' shorthand) for the "
+                    "saved PNG. Default: "
+                    "~/.cache/hermes-comfyui-theme-maker/<name>.png. Pass "
+                    "an explicit path if the user wants the image somewhere "
+                    "specific."
+                ),
+            },
+        },
+        "required": ["name", "frontend_path"],
+    },
+}
+
 RENDER_THEME_SWATCH = {
     "name": "render_theme_swatch",
     "description": (

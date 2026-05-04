@@ -480,6 +480,161 @@ def render_theme_swatch(args: dict, **kwargs) -> str:
     )
 
 
+_IMAGE_BG = "#0e0e10"
+_IMAGE_FG = "#f0eee6"
+_IMAGE_MUTED = "#8a8a92"
+_IMAGE_SIZE = 1080
+_IMAGE_MARGIN = 60
+
+
+def _hex_rgb01(hex_value: str) -> tuple:
+    return (
+        int(hex_value[1:3], 16) / 255.0,
+        int(hex_value[3:5], 16) / 255.0,
+        int(hex_value[5:7], 16) / 255.0,
+    )
+
+
+def _hex_luminance(hex_value: str) -> float:
+    r, g, b = _hex_rgb01(hex_value)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def render_theme_image(args: dict, **kwargs) -> str:
+    args = args or {}
+    name = (args.get("name") or "").strip()
+    raw_path = (args.get("frontend_path") or "").strip()
+    raw_output = (args.get("output_path") or "").strip()
+    if not _VALID_SLUG.match(name):
+        return json.dumps({"error": f"invalid theme slug: {name!r}"})
+
+    frontend, err = _resolve_frontend(raw_path)
+    if err:
+        return json.dumps({"error": err})
+
+    theme_file = _themes_dir(frontend) / f"{name}.css"
+    if not theme_file.exists():
+        return json.dumps({"error": f"theme not found: {theme_file}"})
+
+    matches = _TOKEN_LINE_RE.findall(theme_file.read_text())
+    if not matches:
+        return json.dumps({"error": f"no token overrides found in {theme_file}"})
+
+    try:
+        import drawbot_skia.drawbot as db
+    except ImportError:
+        return json.dumps(
+            {
+                "error": "drawbot-skia not installed; "
+                "pip install drawbot-skia in the hermes-agent venv"
+            }
+        )
+
+    if raw_output:
+        out_path = Path(raw_output).expanduser().resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        out_path = _cache_dir() / f"{name}.png"
+
+    groups: dict = {}
+    for token, hex_val in matches:
+        groups.setdefault(_categorize_token(token), []).append(
+            (token, hex_val.lower())
+        )
+
+    def yflip(y_top: float) -> float:
+        return _IMAGE_SIZE - y_top
+
+    def fill_hex(hex_value: str) -> None:
+        r, g, b = _hex_rgb01(hex_value)
+        db.fill(r, g, b)
+
+    def rect_top(x, y_top, w, h):
+        db.rect(x, yflip(y_top + h), w, h)
+
+    def text_top(text, x, y_top_baseline, fontname="Helvetica", size=20):
+        db.font(fontname)
+        db.fontSize(size)
+        db.text(text, (x, yflip(y_top_baseline)))
+
+    def draw_swatch(x, y_top, w, h, hex_val, label_token):
+        fill_hex(hex_val)
+        rect_top(x, y_top, w, h)
+        text_color = "#0a0a0a" if _hex_luminance(hex_val) > 0.55 else "#f5f5f5"
+        fill_hex(text_color)
+        text_top(hex_val, x + 14, y_top + 30, "Helvetica-Bold", 20)
+        fill_hex(text_color)
+        text_top(label_token, x + 14, y_top + 52, "Helvetica", 14)
+
+    def draw_section(title, swatches, y_top, cols=4, swatch_h=78, gutter=14):
+        fill_hex(_IMAGE_FG)
+        text_top(title, _IMAGE_MARGIN, y_top + 18, "Helvetica-Bold", 20)
+        y_grid = y_top + 36
+        inner = _IMAGE_SIZE - _IMAGE_MARGIN * 2
+        swatch_w = (inner - gutter * (cols - 1)) // cols
+        for i, (token, hex_val) in enumerate(swatches):
+            col = i % cols
+            row = i // cols
+            sx = _IMAGE_MARGIN + col * (swatch_w + gutter)
+            sy = y_grid + row * (swatch_h + gutter)
+            draw_swatch(sx, sy, swatch_w, swatch_h, hex_val, token)
+        rows = (len(swatches) + cols - 1) // cols
+        return y_grid + rows * (swatch_h + gutter) + 18
+
+    db.newDrawing()
+    db.size(_IMAGE_SIZE, _IMAGE_SIZE)
+    fill_hex(_IMAGE_BG)
+    db.rect(0, 0, _IMAGE_SIZE, _IMAGE_SIZE)
+
+    fill_hex(_IMAGE_FG)
+    text_top(name, _IMAGE_MARGIN, 90, "Helvetica-Bold", 56)
+    fill_hex(_IMAGE_MUTED)
+    text_top(
+        f"{len(matches)} token overrides · hermes-comfyui-theme-maker",
+        _IMAGE_MARGIN,
+        125,
+        "Helvetica",
+        18,
+    )
+
+    y = 160
+    if "Charcoal (dark neutrals)" in groups:
+        ramp = sorted(groups["Charcoal (dark neutrals)"])
+        stripe_w = (_IMAGE_SIZE - _IMAGE_MARGIN * 2) // len(ramp)
+        for i, (_token, hex_val) in enumerate(ramp):
+            fill_hex(hex_val)
+            rect_top(_IMAGE_MARGIN + i * stripe_w, y, stripe_w, 50)
+        y += 50 + 30
+
+    for category in _CATEGORY_ORDER:
+        if category in groups:
+            y = draw_section(category, sorted(groups[category]), y)
+
+    fill_hex(_IMAGE_MUTED)
+    text_top(
+        "github.com/eliheuer/hermes-comfyui-theme-maker · GPL-3.0",
+        _IMAGE_MARGIN,
+        _IMAGE_SIZE - 36,
+        "Helvetica",
+        14,
+    )
+
+    try:
+        db.saveImage(str(out_path))
+    finally:
+        db.endDrawing()
+
+    return json.dumps(
+        {
+            "ok": True,
+            "name": name,
+            "path": str(out_path),
+            "size": f"{_IMAGE_SIZE}x{_IMAGE_SIZE}",
+            "tokens_in_theme": len(matches),
+        }
+    )
+
+
 def extract_palette_from_image(args: dict, **kwargs) -> str:
     args = args or {}
     raw_path = args.get("path") or ""
