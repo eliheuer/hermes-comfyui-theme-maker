@@ -1,247 +1,105 @@
 # Project plan: hermes-comfyui-theme-maker
 
-This document captures the vision, roadmap, and load-bearing decisions for
-the project so future coding sessions don't have to relitigate them.
+Vision and load-bearing decisions. The README covers what the plugin is
+and how to use it; this doc covers why it's shaped the way it is.
 
 ## Vision
 
 Hermes Agent uses ComfyUI as a research and generation partner inside an
 agentic loop, producing themes for the ComfyUI frontend that are
 **grounded in actual generated visuals** rather than guessed from a
-description. The image generation, file I/O, and live-preview pieces
-all run locally on Apple Silicon (ComfyUI text-to-image on Metal,
-ComfyUI_frontend dev server via Vite HMR); the LLM brain that drives
-Hermes can run locally OR via cloud (Kimi-K2, Nous Portal Hermes,
-OpenRouter, etc.) — whichever fits the user's hardware and budget.
+description. Image generation, file I/O, and live-preview run locally
+on Apple Silicon (ComfyUI text-to-image on Metal, ComfyUI_frontend dev
+server via Vite HMR); the LLM brain driving Hermes can run locally
+OR via cloud — whichever fits the user's hardware and budget.
 
-Each tool is doing what it's strongest at:
+Each piece does what it's strongest at:
 
-- **ComfyUI** — image generation. Used here as visual research: a single
-  text-to-image call returns an "inspiration" image whose dominant
-  colors anchor the theme palette.
-- **Hermes Agent** — agentic multi-step planning + tool use. Used here
-  to interpret a vague description, decide whether to do visual
-  research, orchestrate the generate → analyze → synthesize → apply
-  loop, and iterate on user feedback.
-- **The skill** — design knowledge. The token taxonomy, cascade rules,
-  and design heuristics live in `SKILL.md` so the LLM doesn't have to
+- **ComfyUI** — image generation as visual research. A single text-to-
+  image call returns an inspiration image whose dominant colors anchor
+  the theme palette.
+- **Hermes Agent** — multi-step planning and tool use. Interprets the
+  user's description, orchestrates the generate → analyze → synthesize
+  → apply loop, iterates on feedback.
+- **The skill** — design knowledge. Token taxonomy, cascade rules, and
+  design heuristics live in `SKILL.md` so the LLM doesn't have to
   rediscover them per turn.
 
-## What we're building (the agentic loop)
+## What's built
 
-Target end-to-end flow when a user types something like *"make a
-campfire theme"* into a `hermes` chat:
-
-1. Hermes loads the `comfyui-theme-maker` skill, reads the design knowledge
-   and token taxonomy.
-2. Hermes calls `list_comfyui_tokens` to ground itself in the real
-   override surface.
-3. Hermes plans: *"a campfire vibe is ambiguous; I'll generate a
-   reference image to anchor concrete colors."*
-4. Hermes calls `generate_mood_image("campfire embers in autumn forest,
-   dusk, glowing logs")`. ComfyUI runs its Anima turbo workflow and
-   returns a path to the generated PNG.
-5. Hermes calls `extract_palette_from_image(path, n_colors=8)`.
-   K-means returns 8 dominant hex colors.
-6. Hermes designs the theme: maps the dark palette anchors onto the
-   `charcoal` ramp, the warm anchors onto a `coral`/`gold` ramp,
-   chooses Run/Stop colors, and calls `write_comfyui_theme`.
-7. Hermes calls `apply_comfyui_theme`. Vite HMR live-reloads the
-   browser. User sees both the reference image and a theme grounded in
-   it.
-8. User: *"warmer, less green."* Hermes adjusts overrides (no new image
-   needed) and re-applies. Iterate until the user is satisfied.
-
-Text-only fallback: if ComfyUI is unreachable or `generate_mood_image`
-fails, Hermes skips steps 4–5 and goes straight to text-only theme
-generation. The current MVP is exactly this fallback.
-
-## Roadmap
-
-Three layers, ship in order. Each is independently demoable.
-
-### Layer 1 — text-only theme generation (DONE)
-
-- Plugin scaffold: `__init__.py`, `plugin.yaml`, `schemas.py`, `tools.py`,
-  `token_inventory.py`.
-- Skill: `skills/comfyui-theme-maker/SKILL.md` with token taxonomy, cascade
-  rules, design heuristics, worked example.
-- Tools: `list_comfyui_tokens`, `write_comfyui_theme`,
-  `apply_comfyui_theme`.
-- Hand-designed reference theme: `examples/campfire.css`.
-- Smoke test: `scripts/smoke_test.py` (15/15 pass against real
-  ComfyUI_frontend on PR branch).
-
-### Layer 2 — image-gen palette research (NEXT, today's main build)
-
-- New tool: `generate_mood_image(prompt: str) -> {path, ...}` — submits
-  a text-to-image workflow to the local ComfyUI HTTP API, polls for
-  completion, returns the generated image path.
-- New tool: `extract_palette_from_image(path: str, n_colors: int) ->
-  {colors: [hex...]}` — k-means dominant color extraction.
-- Workflow template: a parameterizable Anima/Qwen turbo workflow JSON
-  derived from the user's existing `image_anima_preview--turbo.app.json`.
-- Skill update: extend `SKILL.md` with the visual-research workflow,
-  guidance on when to skip the image step, and how to map extracted
-  palette anchors onto the token ramps.
-- Smoke test extension: add live ComfyUI tests guarded by an env var so
-  CI / unattended runs still pass.
-
-### Layer 3 — memory of aesthetic preferences (STRETCH)
-
-- After the user accepts a theme, write a small memory record via
-  Hermes' memory subsystem: what mode, what color family, what was
-  rejected, what was kept.
-- Skill consults memory on subsequent runs. Demo angle: "the agent
-  learns your taste over sessions."
-- This is a Nous-distinctive hook (their tagline is "self-improving
-  AI agent") and ~30 min of work *if* Hermes' memory API is
-  ergonomic. Skip if it isn't.
-
-## Time budget for today
-
-Hackathon submission deadline is end of today (2026-05-03). Working
-backward:
-
-| Block | Estimate | What |
-|---|---|---|
-| GGUF download finishes | ~30 min | Background — already running |
-| Layer 2 build (`generate_mood_image`) | 60 min | Workflow template extract, HTTP submit + poll, error paths |
-| Layer 2 build (`extract_palette_from_image`) | 30 min | Pillow + scikit-learn or numpy k-means |
-| Skill update + plugin re-register | 20 min | Document new tools in `SKILL.md` |
-| End-to-end smoke against real stack | 30 min | `hermes` → describe vibe → image generated → theme applied |
-| Layer 3 (memory) if time | 30 min | Optional |
-| Demo capture + submission | 30 min | Screen recording, submission form |
-
-Roughly 3–4 hours of focused build remaining once download finishes.
-Scope discipline: layer 2 is the ship gate; layer 3 only if comfortable.
+- One **skill** (`comfyui-theme-maker`) with the design knowledge.
+- Five **tools** the agent calls in an agentic loop:
+  - `list_comfyui_tokens` — enumerate every overridable CSS custom
+    property the theme can target.
+  - `generate_mood_image` — submit a parameterized Anima/Qwen workflow
+    to local ComfyUI's HTTP API; poll, fetch, cache the resulting PNG.
+  - `extract_palette_from_image` — median-cut quantization via Pillow
+    returns dominant hex colors with weights.
+  - `write_comfyui_theme` — render `:root { --token: value; }` CSS
+    into the user's ComfyUI_frontend checkout.
+  - `apply_comfyui_theme` — inject one `@import` into the frontend's
+    main `style.css` between sentinel comments. Idempotent; one theme
+    active at a time. Vite HMR live-reloads the browser.
+- A hand-designed reference theme (`examples/campfire.css`) usable
+  directly without the agent — handy as a known-good baseline.
+- A smoke test exercising the I/O tools end-to-end against a real
+  ComfyUI_frontend (17 checks).
 
 ## Load-bearing decisions
 
-Decisions already made and the reasoning, so we don't relitigate.
+### Cloud LLM is the practical path
 
-### Why `llama.cpp` over Ollama or MLX
+The original plan was fully local. On a 48 GB Mac with ComfyUI also
+running, this didn't survive contact with reality: Hermes-4.3-36B
+Q4_K_M (~22 GB) OOMs Metal mid-prompt; Hermes-4-14B Q4_K_M (~8.4 GB)
+survives idle but prompt-processing peaks throw memory warnings, and
+14B's tool-calling reliability is marginal.
 
-Nous Research publishes the **official** GGUF for Hermes-4.3-36B
-themselves; `llama.cpp` is the engine that format targets. Ollama wraps
-`llama.cpp` and adds friction (its own model registry, Modelfile
-format). MLX has no Hermes conversion in `mlx-community`. The
-hermes-agent quickstart docs reference `llama.cpp` by name (`--ctx-size
-65536`). "Use the weights Nous publishes, in the format Nous publishes
-them, with the engine they target" is the right Nous-native story.
+Cloud LLM for the brain (Kimi-K2 verified, Nous Portal Hermes
+equivalent) plus local for everything else gets faster turn-around,
+no memory pressure, and more reliable structured tool calls. Local
+LLM remains documented as an "≥ 64 GB unified memory" alternative.
 
-### Why a Hermes plugin (skill + tools), not MCP
+### Hermes plugin (skill + tools), not MCP
 
-Hermes' extension model has skills (markdown context), tools (Python
-functions), MCP servers (external processes), and plugins (the package
-that bundles skills + tools). A plugin combining a `SKILL.md` and three
-tools is the **Hermes-native** shape — same pattern as the 671 bundled
-skills in their repo. MCP would buy portability to Claude Code /
-OpenCode at the cost of feeling external; that's not the goal for a
-Nous hackathon submission.
+A plugin combining a `SKILL.md` and tools is the Hermes-native shape —
+same pattern as the bundled skills shipped with hermes-agent. MCP
+would buy portability to other agents at the cost of feeling
+external; not the goal for a Nous-aligned submission.
 
-### Why CSS custom-property overrides at the palette layer
+### CSS overrides at the palette layer
 
-ComfyUI_frontend already has a clean three-layer token system:
-
-- **Palette** (`_palette.css`) — raw color ramps.
-- **Semantic** (`design-system/style.css`) — semantic tokens that
-  reference the palette, with separate `:root` (light) and `.dark-theme`
-  (dark) blocks.
-- **App-mode** (`src/assets/css/style.css`, PR #11317) — local app-mode
-  tokens, currently hard-coded hex.
-
-Overriding the palette layer at `:root` cascades through every semantic
-token automatically, and the user's existing dark/light toggle keeps
-working because semantic tokens still resolve through the inheritance
-chain. So our output is always a single CSS file overriding palette
-tokens (and a small set of app-mode tokens) — we never touch the
+ComfyUI_frontend has a clean three-layer token system: raw palette
+(`charcoal-*`, `smoke-*`, …), semantic tokens that reference the
+palette with separate `:root` (light) and `.dark-theme` (dark)
+blocks, and the new app-mode tokens from PR #11317. Overriding the
+palette at `:root` cascades through every semantic token, and the
+existing dark/light toggle keeps working because semantic tokens
+still resolve through the inheritance chain. Output is always one
+CSS file overriding palette + app-mode tokens; we never touch the
 semantic layer.
 
-### Why image-gen-based palette research vs. pure text generation
+### Image-gen-grounded palette vs. text-only
 
-A text-only path is "Hermes calls an LLM and writes some CSS." It uses
-ComfyUI as a host but not as a generator. Adding `generate_mood_image`
-+ `extract_palette_from_image` makes ComfyUI's core competency
-(diffusion image generation) part of the agentic loop, gives Hermes
-real visual anchors instead of guessed colors, and produces a more
-compelling demo because there's an actual image being generated on
-screen.
+Letting the LLM guess colors from a description uses ComfyUI as a
+passive host. Generating a real image and extracting its palette uses
+ComfyUI's actual strength. Themes feel coherent because they have a
+visual *source*; the agentic loop grows naturally — plan, call tools,
+read results, call more tools.
 
-### Why the Anima/Qwen aesthetic for mood images
+### `frontend_path` as an explicit tool argument
 
-The user's existing local stack is Anima (anime-style fine-tunes of
-Qwen Image). Switching to a photorealistic checkpoint (Flux/SD3) means
-another ~12 GB download we don't have time for. Anime style is fine for
-palette extraction — k-means doesn't care about photorealism, only
-pixel colors — and the stylization adds character to the demo rather
-than detracting from it.
+Earlier iterations hardcoded user-specific paths, then auto-detected
+via candidate lists. Both designs were wrong: hidden state, brittle
+defaults. The right answer for an agent is to ask the user once
+(saving the answer to memory), then pass the path to every tool
+call. No env vars, no candidate lists, no setup.
 
-### Why warm-grounded over neon for the reference theme
+### Anime mood-image aesthetic (current install constraint)
 
-User feedback: a synthwave/neon default reads as a tired AI-art trope.
-The reference theme `examples/campfire.css` uses burnt-wood neutrals,
-ember oranges, and amber yellows. The aesthetic recommendation also
-landed in long-term memory so future defaults don't drift back to neon.
-
-### Why a cloud LLM ended up being the practical choice
-
-The original plan was fully local: `llama-server` on Metal serving a
-Hermes GGUF, no cloud dependency. Two memory-pressure incidents during
-the hackathon convinced us this was wrong on a 48 GB Mac:
-
-- **Hermes-4.3-36B Q4_K_M** (~22 GB): wired memory pegs at ~33 GB,
-  macOS throws out-of-memory warnings, Metal command buffers fail
-  with `kIOGPUCommandBufferCallbackErrorOutOfMemory` mid-prompt.
-- **Hermes-4-14B Q4_K_M** (~8.4 GB): smaller and survives idle, but
-  prompt processing peaks (default 2K-token batches in llama.cpp)
-  still hit memory warnings when ComfyUI's Anima weights are loaded.
-  Reducing to `--ubatch-size 128 --batch-size 512` helps but the
-  14B's tool-calling reliability also turned out to be marginal — it
-  sometimes emitted JSON intent without executing the call.
-
-**Practical answer: cloud LLM for the brain, local for everything
-else.** Kimi-K2 (Moonshot) was the model verified working
-end-to-end. Nous Portal hosted Hermes works equivalently. The agent's
-tools still hit ComfyUI on `127.0.0.1:8188`, still write to a local
-`ComfyUI_frontend` checkout, still live-reload via Vite HMR — only
-the language-model inference moves off-box. Net effect: faster
-turn-around, no memory pressure, more reliable structured tool calls.
-
-Local LLM remains supported in the README but is flagged as the
-"advanced / ≥ 64 GB unified memory" path. Operational rule for the
-common 48 GB Mac: **use a cloud LLM, keep ComfyUI local**.
-
-## Open questions
-
-Resolve when implementing layer 2:
-
-1. **Workflow template extraction.** The user has
-   `image_anima_preview--turbo.app.json` saved. Need to convert this from
-   the UI workflow format to the API "prompt" format (different
-   structure), parameterize the prompt text and image size, and bundle
-   it with the plugin.
-2. **K-means dependency.** Pillow + numpy is sufficient for k-means
-   without scikit-learn, but scikit-learn is one line cleaner. Pick
-   based on what's already in the hermes-agent venv vs. needs install.
-3. **Image generation latency.** Anima turbo on M4 with the LoRA
-   should be ~5–15 seconds for 512×512. Need to confirm and decide on
-   an acceptable timeout for `generate_mood_image`.
-4. **Iteration without re-generation.** User says "warmer" — Hermes
-   should reuse the existing palette anchors and just remix, not
-   regenerate the image. Worth making explicit in `SKILL.md`.
-
-## What this project demonstrates
-
-For the hackathon submission:
-
-- **Both tools at full power.** ComfyUI generating images, Hermes
-  orchestrating an agentic loop. Neither is a passive host.
-- **Local-first.** Every model and every tool runs on the user's M4.
-  No cloud dependency, no API keys for the core flow.
-- **Plugin-native.** Hermes' first-class skill + tool + plugin model,
-  not a generic MCP wrapper.
-- **Practical.** The output is a real CSS theme that integrates with an
-  active ComfyUI_frontend PR (#11317) — not a toy. The project doubles
-  as a forcing function for the upcoming theme-system redesign the PR
-  description mentions.
+The Anima/Qwen text-to-image stack is hardcoded into the workflow
+template in `tools.py`. This was the user's existing local stack;
+photorealistic checkpoints would require another large download. For
+palette extraction the stylization doesn't matter — k-means cares
+about pixel colors only. Generalizing the workflow template to other
+ComfyUI installs is future work.

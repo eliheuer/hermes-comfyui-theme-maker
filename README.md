@@ -252,15 +252,9 @@ comments — idempotent, removable, single source of truth.
 
 ## Project documentation
 
-For the design vision, roadmap, and load-bearing decisions:
-
-- [`PLAN.md`](./PLAN.md) — vision, roadmap (current MVP / next /
-  stretch), time budget, decisions with rationale, open questions.
+- [`PLAN.md`](./PLAN.md) — vision and load-bearing design decisions.
 - [`docs/architecture.md`](./docs/architecture.md) — component map,
-  end-to-end data flow, file layout, integration points, tool
-  inventory, failure modes.
-- [`docs/comfyui-api-notes.md`](./docs/comfyui-api-notes.md) — ComfyUI
-  HTTP API reference for the planned image-gen tools.
+  data flow, file layout, integration points, failure modes.
 
 ## License
 
