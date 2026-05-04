@@ -196,6 +196,10 @@ HERMES_COMFYUI_FRONTEND_PATH=/path/to/ComfyUI_frontend \
 - [`PLAN.md`](./PLAN.md) — vision and load-bearing design decisions.
 - [`docs/architecture.md`](./docs/architecture.md) — component map,
   data flow, integration points, failure modes.
+- [`docs/comfyui-theme-system.md`](./docs/comfyui-theme-system.md) —
+  how ComfyUI's existing theme/palette system works, why this
+  plugin's CSS-import approach bypasses the menu, and concrete PR
+  opportunities to integrate properly.
 
 ## License
 
