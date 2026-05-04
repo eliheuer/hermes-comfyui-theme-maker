@@ -66,6 +66,7 @@ handles agentic tool-calling for this project comfortably.
 ```bash
 llama-server \
     --model ~/models/hermes-4-14b/NousResearch_Hermes-4-14B-Q4_K_M.gguf \
+    --alias Hermes-4-14B-Q4 \
     --ctx-size 65536 \
     -ngl 999 \
     --host 127.0.0.1 \
@@ -77,8 +78,11 @@ llama-server \
 
 Flags worth knowing:
 
+- `--alias Hermes-4-14B-Q4` — friendly name reported as the model id;
+  keeps the hermes TUI status bar readable.
 - `--ctx-size 65536` — hermes-agent requires a 64K-token context at
-  minimum.
+  minimum (the model itself is natively 40K, llama.cpp extends via
+  RoPE; in practice we never exceed ~24K so quality stays clean).
 - `-ngl 999` — offload every layer to Metal (full GPU acceleration).
 - `--jinja` — required for tool calling; enables Jinja chat templates
   so OpenAI-style `tool_calls` round-trip correctly.
@@ -100,10 +104,21 @@ Then run `hermes model` and walk through the interactive wizard:
 - Pick **Custom Endpoint** (the OpenAI-compatible / VLLM / Ollama
   category).
 - Base URL: `http://127.0.0.1:8080/v1`
-- Model name: `NousResearch_Hermes-4-14B-Q4_K_M.gguf`
+- Model name: `Hermes-4-14B-Q4` (the alias from the llama-server
+  command above; the underlying file is named differently but the
+  alias is what hermes sends to the API).
 - API key: any string (the local server doesn't check) — `sk-noauth`
   is fine.
 - Set as default.
+
+Hermes-agent also requires a 64K-minimum context window. Hermes-4-14B
+reports a 40K window in its GGUF metadata, so override after the
+wizard:
+
+```bash
+hermes config set model.context_length 65536
+hermes config set auxiliary.compression.context_length 65536
+```
 
 ### 4. Install this plugin
 
