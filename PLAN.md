@@ -183,6 +183,32 @@ The reference theme `examples/campfire.css` uses burnt-wood neutrals,
 ember oranges, and amber yellows. The aesthetic recommendation also
 landed in long-term memory so future defaults don't drift back to neon.
 
+### Why Hermes-4-14B (not 4.3-36B) on a 48 GB Mac
+
+We initially picked Hermes-4.3-36B Q4_K_M because Nous publishes the
+official GGUF and it's their flagship sub-70B model. **It does not fit
+in this hardware envelope.** Discovered live during the hackathon:
+
+- Model in Metal memory: ~22 GB.
+- KV cache at the 64K context hermes-agent requires (even with the
+  `q8_0` cache-type trick that halves it from fp16): ~10 GB.
+- ComfyUI with Anima loaded: ~6–8 GB.
+- macOS background, browser, dev servers: ~10 GB baseline.
+- Total: ~50 GB on a 48 GB system → wired memory pegs at ~33 GB and
+  macOS starts throwing out-of-memory warnings; Metal command buffers
+  fail with `kIOGPUCommandBufferCallbackErrorOutOfMemory` mid-prompt.
+
+Switching to **Hermes-4-14B Q4_K_M** (Bartowski's GGUF) drops the
+model to ~8.4 GB and KV cache to ~3 GB at the same 64K context.
+Total budget becomes ~30 GB instead of ~50 GB — comfortable. 14B
+handles the agent flow cleanly because the work is "pick palette
+anchors and emit JSON," not deep multi-step reasoning. Quality
+difference is real but not load-bearing for this project.
+
+Operational rule: **on 48 GB unified memory with ComfyUI also
+running, cap the local LLM at ~14B Q4_K_M.** Bigger models need a
+bigger machine or a swap that boots ComfyUI in/out per request.
+
 ## Open questions
 
 Resolve when implementing layer 2:
