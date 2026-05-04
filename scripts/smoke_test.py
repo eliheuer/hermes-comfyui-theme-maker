@@ -88,9 +88,13 @@ def _expect_error(payload: dict, msg: str) -> bool:
 
 
 def main() -> int:
-    # Reuse the plugin's own resolution so the smoke test exercises the
-    # same path-discovery the tools rely on.
-    frontend = tools._frontend_path()
+    # The tools take frontend_path as an explicit argument now; for the
+    # smoke test we resolve from the env var (set this before running).
+    raw = os.environ.get("HERMES_COMFYUI_FRONTEND_PATH")
+    if not raw:
+        print("abort: set HERMES_COMFYUI_FRONTEND_PATH to your ComfyUI_frontend root")
+        return 2
+    frontend = Path(raw).expanduser().resolve()
     style = frontend / "src" / "assets" / "css" / "style.css"
     themes_dir = frontend / "src" / "assets" / "css" / "themes"
     smoke_a = themes_dir / "smoke-test.css"
@@ -130,17 +134,47 @@ def main() -> int:
         payload = json.loads(tools.list_tokens({"layer": "bogus"}))
         _expect_error(payload, "rejects unknown layer")
 
+        _label("write_theme(missing frontend_path)")
+        payload = json.loads(
+            tools.write_theme(
+                {"name": "smoke-test", "overrides": {"color-charcoal-800": "#000"}}
+            )
+        )
+        _expect_error(payload, "rejects missing frontend_path")
+
+        _label("write_theme(bad frontend_path)")
+        payload = json.loads(
+            tools.write_theme(
+                {
+                    "name": "smoke-test",
+                    "overrides": {"color-charcoal-800": "#000"},
+                    "frontend_path": "/no/such/place",
+                }
+            )
+        )
+        _expect_error(payload, "rejects nonexistent frontend_path")
+
         _label("write_theme(invalid slug)")
         payload = json.loads(
             tools.write_theme(
-                {"name": "Bad Slug", "overrides": {"color-charcoal-800": "#000"}}
+                {
+                    "name": "Bad Slug",
+                    "overrides": {"color-charcoal-800": "#000"},
+                    "frontend_path": str(frontend),
+                }
             )
         )
         _expect_error(payload, "rejects slug with spaces and capitals")
 
         _label("write_theme(empty overrides)")
         payload = json.loads(
-            tools.write_theme({"name": "smoke-test", "overrides": {}})
+            tools.write_theme(
+                {
+                    "name": "smoke-test",
+                    "overrides": {},
+                    "frontend_path": str(frontend),
+                }
+            )
         )
         _expect_error(payload, "rejects empty overrides")
 
@@ -150,6 +184,7 @@ def main() -> int:
                 {
                     "name": "smoke-test",
                     "overrides": {"color-bogus-999": "#000"},
+                    "frontend_path": str(frontend),
                 }
             )
         )
@@ -165,7 +200,13 @@ def main() -> int:
             "app-mode-go-bg": "#2a8a55",
         }
         payload = json.loads(
-            tools.write_theme({"name": "smoke-test", "overrides": overrides})
+            tools.write_theme(
+                {
+                    "name": "smoke-test",
+                    "overrides": overrides,
+                    "frontend_path": str(frontend),
+                }
+            )
         )
         _expect_ok(payload, f"wrote {payload.get('tokens_written')} tokens")
         if smoke_a.exists():
@@ -181,7 +222,11 @@ def main() -> int:
             _bad(f"file missing: {smoke_a}")
 
         _label("apply_theme(first apply)")
-        payload = json.loads(tools.apply_theme({"name": "smoke-test"}))
+        payload = json.loads(
+            tools.apply_theme(
+                {"name": "smoke-test", "frontend_path": str(frontend)}
+            )
+        )
         _expect_ok(payload, "applied smoke-test")
         text = style.read_text()
         if (
@@ -195,7 +240,11 @@ def main() -> int:
 
         _label("apply_theme(re-apply is idempotent)")
         text_a = style.read_text()
-        json.loads(tools.apply_theme({"name": "smoke-test"}))
+        json.loads(
+            tools.apply_theme(
+                {"name": "smoke-test", "frontend_path": str(frontend)}
+            )
+        )
         text_b = style.read_text()
         if text_a == text_b:
             _ok("re-apply produced identical file")
@@ -208,10 +257,15 @@ def main() -> int:
                 {
                     "name": "smoke-test-2",
                     "overrides": {"color-charcoal-800": "#101"},
+                    "frontend_path": str(frontend),
                 }
             )
         )
-        json.loads(tools.apply_theme({"name": "smoke-test-2"}))
+        json.loads(
+            tools.apply_theme(
+                {"name": "smoke-test-2", "frontend_path": str(frontend)}
+            )
+        )
         text = style.read_text()
         if (
             text.count("/* hermes-comfyui-theme-maker:active */") == 1
@@ -223,7 +277,11 @@ def main() -> int:
             _bad("swap left stale state")
 
         _label("apply_theme(missing theme)")
-        payload = json.loads(tools.apply_theme({"name": "does-not-exist"}))
+        payload = json.loads(
+            tools.apply_theme(
+                {"name": "does-not-exist", "frontend_path": str(frontend)}
+            )
+        )
         _expect_error(payload, "rejects missing theme file")
 
     finally:

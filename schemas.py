@@ -33,10 +33,13 @@ LIST_TOKENS = {
 WRITE_THEME = {
     "name": "write_comfyui_theme",
     "description": (
-        "Write a CSS theme file to the ComfyUI frontend's themes directory. "
+        "Write a CSS theme file to the user's ComfyUI_frontend checkout. "
         "Pass overrides as a flat token-name to value dict. Token names must "
         "come from list_comfyui_tokens; unknown tokens are rejected. The "
-        "leading '--' is omitted from token names."
+        "leading '--' is omitted from token names. The frontend_path "
+        "argument is required — ask the user for their ComfyUI_frontend "
+        "checkout location and pass it explicitly; the tool does NOT "
+        "auto-detect."
     ),
     "parameters": {
         "type": "object",
@@ -58,8 +61,18 @@ WRITE_THEME = {
                 ),
                 "additionalProperties": {"type": "string"},
             },
+            "frontend_path": {
+                "type": "string",
+                "description": (
+                    "Absolute path (or '~/...' shorthand) to the user's "
+                    "ComfyUI_frontend checkout root. The directory must "
+                    "contain src/assets/css/style.css. Ask the user for "
+                    "this once per session and remember it via the memory "
+                    "tool for future sessions."
+                ),
+            },
         },
-        "required": ["name", "overrides"],
+        "required": ["name", "overrides", "frontend_path"],
     },
 }
 
@@ -69,7 +82,8 @@ APPLY_THEME = {
         "Activate a previously-written theme by injecting an @import into the "
         "frontend's main style.css between sentinel comments. Idempotent: "
         "only one theme is active at a time. If a Vite dev server is running "
-        "the change hot-reloads."
+        "the change hot-reloads. The frontend_path argument must match the "
+        "one passed to write_comfyui_theme."
     ),
     "parameters": {
         "type": "object",
@@ -80,8 +94,15 @@ APPLY_THEME = {
                     "Theme slug previously passed to write_comfyui_theme."
                 ),
             },
+            "frontend_path": {
+                "type": "string",
+                "description": (
+                    "Same ComfyUI_frontend checkout path used in "
+                    "write_comfyui_theme."
+                ),
+            },
         },
-        "required": ["name"],
+        "required": ["name", "frontend_path"],
     },
 }
 

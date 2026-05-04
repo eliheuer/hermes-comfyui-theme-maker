@@ -16,59 +16,35 @@ from pathlib import Path
 from . import token_inventory as inventory
 
 
-_FRONTEND_MARKER = Path("src") / "assets" / "css" / "style.css"
+def _resolve_frontend(raw: str) -> tuple[Path | None, str | None]:
+    """Resolve a user-supplied frontend path string into a checkout root.
 
-
-def _frontend_candidates() -> list[Path]:
-    """Common locations a ComfyUI_frontend dev checkout might live.
-
-    Used in priority order; the first one that contains the expected
-    `src/assets/css/style.css` marker file wins.
+    Returns (path, error_message). On success, error_message is None and
+    path is a Path that contains src/assets/css/style.css. On failure,
+    path is None and error_message describes what was wrong.
     """
-    home = Path.home()
-    return [
-        Path.cwd() / "ComfyUI_frontend",
-        home / "ComfyUI_frontend",
-        home / "comfy" / "ComfyUI_frontend",
-        home / "Comfy" / "ComfyUI_frontend",
-        home / "code" / "ComfyUI_frontend",
-        home / "dev" / "ComfyUI_frontend",
-        home / "src" / "ComfyUI_frontend",
-        home / "projects" / "ComfyUI_frontend",
-        home / "repos" / "ComfyUI_frontend",
-        home / "Documents" / "ComfyUI_frontend",
-    ]
+    if not raw:
+        return None, "frontend_path is required"
+    path = Path(raw).expanduser().resolve()
+    if not path.exists():
+        return None, f"frontend_path does not exist: {path}"
+    style = path / "src" / "assets" / "css" / "style.css"
+    if not style.exists():
+        return None, (
+            f"{path} does not look like a ComfyUI_frontend checkout "
+            f"(missing src/assets/css/style.css)"
+        )
+    return path, None
 
 
-def _frontend_path() -> Path:
-    """Resolve the ComfyUI_frontend checkout we write themes into.
-
-    Resolution order:
-      1. HERMES_COMFYUI_FRONTEND_PATH env var (explicit override).
-      2. The first candidate from _frontend_candidates() whose
-         `src/assets/css/style.css` exists.
-
-    If neither matches, returns the first candidate so downstream code's
-    existence check produces a clear "not found" error referencing a
-    real path.
-    """
-    env = os.environ.get("HERMES_COMFYUI_FRONTEND_PATH")
-    if env:
-        return Path(env).expanduser()
-    for candidate in _frontend_candidates():
-        if (candidate / _FRONTEND_MARKER).exists():
-            return candidate
-    return _frontend_candidates()[0]
-
-
-def _themes_dir() -> Path:
-    d = _frontend_path() / "src" / "assets" / "css" / "themes"
+def _themes_dir(frontend: Path) -> Path:
+    d = frontend / "src" / "assets" / "css" / "themes"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def _style_css() -> Path:
-    return _frontend_path() / "src" / "assets" / "css" / "style.css"
+def _style_css(frontend: Path) -> Path:
+    return frontend / "src" / "assets" / "css" / "style.css"
 
 
 _VALID_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -111,17 +87,22 @@ def write_theme(args: dict, **kwargs) -> str:
     args = args or {}
     name = (args.get("name") or "").strip()
     overrides = args.get("overrides") or {}
+    raw_path = (args.get("frontend_path") or "").strip()
     if not _VALID_SLUG.match(name):
         return json.dumps({"error": f"invalid theme slug: {name!r}"})
     if not isinstance(overrides, dict) or not overrides:
         return json.dumps({"error": "overrides must be a non-empty object"})
+
+    frontend, err = _resolve_frontend(raw_path)
+    if err:
+        return json.dumps({"error": err})
 
     valid = inventory.names()
     unknown = sorted(t for t in overrides if t not in valid)
     if unknown:
         return json.dumps({"error": "unknown tokens", "unknown": unknown})
 
-    target = _themes_dir() / f"{name}.css"
+    target = _themes_dir(frontend) / f"{name}.css"
     css = _render_css(name, overrides)
     try:
         target.write_text(css)
@@ -139,14 +120,19 @@ def write_theme(args: dict, **kwargs) -> str:
 def apply_theme(args: dict, **kwargs) -> str:
     args = args or {}
     name = (args.get("name") or "").strip()
+    raw_path = (args.get("frontend_path") or "").strip()
     if not _VALID_SLUG.match(name):
         return json.dumps({"error": f"invalid theme slug: {name!r}"})
 
-    theme_file = _themes_dir() / f"{name}.css"
+    frontend, err = _resolve_frontend(raw_path)
+    if err:
+        return json.dumps({"error": err})
+
+    theme_file = _themes_dir(frontend) / f"{name}.css"
     if not theme_file.exists():
         return json.dumps({"error": f"theme not found: {theme_file}"})
 
-    style = _style_css()
+    style = _style_css(frontend)
     if not style.exists():
         return json.dumps({"error": f"style.css missing: {style}"})
 

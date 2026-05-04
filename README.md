@@ -147,20 +147,15 @@ hermes-agent venv doesn't already have it:
 ~/.hermes/hermes-agent/venv/bin/pip install Pillow
 ```
 
-### 5. Point the plugin at your ComfyUI_frontend checkout
+### 5. Tell the agent where your ComfyUI_frontend lives
 
-The plugin auto-detects `ComfyUI_frontend` in common locations
-(`./ComfyUI_frontend`, `~/ComfyUI_frontend`, `~/comfy/ComfyUI_frontend`,
-`~/code/ComfyUI_frontend`, `~/dev/ComfyUI_frontend`,
-`~/src/ComfyUI_frontend`, `~/projects/ComfyUI_frontend`,
-`~/repos/ComfyUI_frontend`, `~/Documents/ComfyUI_frontend`). The first
-one that contains `src/assets/css/style.css` wins.
+There's no env var or config to set up — the agent just asks. On the
+first theme request of a session, Hermes will say something like:
 
-If your checkout lives somewhere else, set the override:
+> Where is your ComfyUI_frontend checkout? e.g. `~/code/ComfyUI_frontend`
 
-```bash
-export HERMES_COMFYUI_FRONTEND_PATH=/path/to/your/ComfyUI_frontend
-```
+Tell it the absolute path. The agent saves it to memory for future
+sessions, so you only get asked once per machine.
 
 > **Scope note:** this plugin currently targets a **dev checkout** of
 > ComfyUI_frontend (the source tree you'd run `pnpm dev` against), not
