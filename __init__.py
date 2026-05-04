@@ -9,10 +9,8 @@ TOOLSET = "comfyui-theme"
 
 
 def register(ctx):
-    skill_md = (
-        Path(__file__).parent / "skills" / SKILL_NAME / "SKILL.md"
-    ).read_text()
-    ctx.register_skill(SKILL_NAME, skill_md)
+    skill_path = Path(__file__).parent / "skills" / SKILL_NAME / "SKILL.md"
+    ctx.register_skill(SKILL_NAME, skill_path)
 
     ctx.register_tool(
         name="list_comfyui_tokens",
