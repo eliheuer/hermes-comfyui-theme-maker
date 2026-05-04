@@ -8,10 +8,11 @@ the project so future coding sessions don't have to relitigate them.
 Hermes Agent uses ComfyUI as a research and generation partner inside an
 agentic loop, producing themes for the ComfyUI frontend that are
 **grounded in actual generated visuals** rather than guessed from a
-description. The full loop runs on Apple Silicon with no cloud
-dependency: a local `llama-server` serving Hermes-4.3-36B-GGUF on Metal,
-ComfyUI running its existing Anima/Qwen text-to-image stack on Metal,
-and the ComfyUI_frontend dev server live-reloading themes via Vite HMR.
+description. The image generation, file I/O, and live-preview pieces
+all run locally on Apple Silicon (ComfyUI text-to-image on Metal,
+ComfyUI_frontend dev server via Vite HMR); the LLM brain that drives
+Hermes can run locally OR via cloud (Kimi-K2, Nous Portal Hermes,
+OpenRouter, etc.) — whichever fits the user's hardware and budget.
 
 Each tool is doing what it's strongest at:
 
@@ -183,31 +184,33 @@ The reference theme `examples/campfire.css` uses burnt-wood neutrals,
 ember oranges, and amber yellows. The aesthetic recommendation also
 landed in long-term memory so future defaults don't drift back to neon.
 
-### Why Hermes-4-14B (not 4.3-36B) on a 48 GB Mac
+### Why a cloud LLM ended up being the practical choice
 
-We initially picked Hermes-4.3-36B Q4_K_M because Nous publishes the
-official GGUF and it's their flagship sub-70B model. **It does not fit
-in this hardware envelope.** Discovered live during the hackathon:
+The original plan was fully local: `llama-server` on Metal serving a
+Hermes GGUF, no cloud dependency. Two memory-pressure incidents during
+the hackathon convinced us this was wrong on a 48 GB Mac:
 
-- Model in Metal memory: ~22 GB.
-- KV cache at the 64K context hermes-agent requires (even with the
-  `q8_0` cache-type trick that halves it from fp16): ~10 GB.
-- ComfyUI with Anima loaded: ~6–8 GB.
-- macOS background, browser, dev servers: ~10 GB baseline.
-- Total: ~50 GB on a 48 GB system → wired memory pegs at ~33 GB and
-  macOS starts throwing out-of-memory warnings; Metal command buffers
-  fail with `kIOGPUCommandBufferCallbackErrorOutOfMemory` mid-prompt.
+- **Hermes-4.3-36B Q4_K_M** (~22 GB): wired memory pegs at ~33 GB,
+  macOS throws out-of-memory warnings, Metal command buffers fail
+  with `kIOGPUCommandBufferCallbackErrorOutOfMemory` mid-prompt.
+- **Hermes-4-14B Q4_K_M** (~8.4 GB): smaller and survives idle, but
+  prompt processing peaks (default 2K-token batches in llama.cpp)
+  still hit memory warnings when ComfyUI's Anima weights are loaded.
+  Reducing to `--ubatch-size 128 --batch-size 512` helps but the
+  14B's tool-calling reliability also turned out to be marginal — it
+  sometimes emitted JSON intent without executing the call.
 
-Switching to **Hermes-4-14B Q4_K_M** (Bartowski's GGUF) drops the
-model to ~8.4 GB and KV cache to ~3 GB at the same 64K context.
-Total budget becomes ~30 GB instead of ~50 GB — comfortable. 14B
-handles the agent flow cleanly because the work is "pick palette
-anchors and emit JSON," not deep multi-step reasoning. Quality
-difference is real but not load-bearing for this project.
+**Practical answer: cloud LLM for the brain, local for everything
+else.** Kimi-K2 (Moonshot) was the model verified working
+end-to-end. Nous Portal hosted Hermes works equivalently. The agent's
+tools still hit ComfyUI on `127.0.0.1:8188`, still write to a local
+`ComfyUI_frontend` checkout, still live-reload via Vite HMR — only
+the language-model inference moves off-box. Net effect: faster
+turn-around, no memory pressure, more reliable structured tool calls.
 
-Operational rule: **on 48 GB unified memory with ComfyUI also
-running, cap the local LLM at ~14B Q4_K_M.** Bigger models need a
-bigger machine or a swap that boots ComfyUI in/out per request.
+Local LLM remains supported in the README but is flagged as the
+"advanced / ≥ 64 GB unified memory" path. Operational rule for the
+common 48 GB Mac: **use a cloud LLM, keep ComfyUI local**.
 
 ## Open questions
 

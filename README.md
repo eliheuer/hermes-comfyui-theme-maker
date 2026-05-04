@@ -1,10 +1,12 @@
 # hermes-comfyui-theme-maker
 
 Generate cohesive [ComfyUI frontend](https://github.com/Comfy-Org/ComfyUI_frontend)
-themes from natural-language descriptions, fully locally on Apple Silicon, via
-a [Hermes Agent](https://hermes-agent.nousresearch.com/) skill plus tools.
+themes from natural-language descriptions via a
+[Hermes Agent](https://hermes-agent.nousresearch.com/) skill plus tools.
+The agent drives the loop; ComfyUI generates a reference image; the plugin
+extracts the palette and writes a live theme into your dev checkout.
 
-Built for the Hermes Agent Creative Hackathon.
+Built for the Hermes Agent Creative Hackathon. Still rough around the edges.
 
 ## What it does
 
@@ -26,44 +28,62 @@ Built for the Hermes Agent Creative Hackathon.
   tokens introduced by ComfyUI_frontend PR #11317
   (`app-mode-semi-customizable-layout`).
 
-## Stack — fully local on Mac M-series
+## Stack
 
-- **llama.cpp** (Metal) serving
-  [Hermes-4-14B-GGUF](https://huggingface.co/bartowski/NousResearch_Hermes-4-14B-GGUF)
-  (Bartowski's quants of the Nous Research model). 14B is the right
-  size on a 48 GB M4 with ComfyUI also running — the 36B variant maxes
-  out unified memory once Metal-locked KV cache and ComfyUI's
-  loaded weights are in play.
-- **hermes-agent** CLI driving the conversation, pointed at the local
-  llama-server endpoint.
-- **ComfyUI** running locally for both (a) hosting the frontend we
-  re-skin and (b) generating mood reference images that anchor each
-  theme's palette.
-- This plugin packaged as a Hermes skill + toolset.
-- Your existing **ComfyUI_frontend** Vite dev server for live preview.
+Three pieces, run roughly independently:
+
+- **Hermes Agent** — drives the conversation, plans the agentic loop,
+  calls this plugin's tools. Any LLM backend that hermes-agent supports
+  works (cloud or local). Cloud is the recommended path; local needs
+  enough memory headroom to coexist with ComfyUI.
+- **ComfyUI** — runs locally on your GPU. Generates the mood reference
+  image (the visual research) and hosts the frontend you re-skin.
+- **ComfyUI_frontend** — your dev checkout running `pnpm dev`. Vite HMR
+  applies theme changes live in the browser.
+
+This plugin is the glue: a Hermes Agent **skill** (design knowledge for
+the LLM) plus five **tools** the agent calls in order.
 
 ## Setup
 
-### 1. Install llama.cpp and the Hermes model
+### 1. Install hermes-agent
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
+source ~/.zshrc  # or ~/.bashrc
+```
+
+### 2. Pick an LLM backend
+
+Run `hermes model` and walk through the interactive wizard. Any provider
+hermes-agent supports works as long as the model can do structured tool
+calling. Two paths:
+
+**Cloud (recommended)** — fast, no local memory cost, works anywhere:
+
+- Pick a provider you have credit on: Kimi/Moonshot, Nous Portal,
+  OpenRouter, OpenAI, Anthropic, etc.
+- Pick a tool-calling-capable model when prompted. Verified working
+  during development: **Kimi-K2** (Moonshot). Larger Hermes models on
+  Nous Portal also work.
+- Set as default.
+
+**Local (advanced)** — runs on your machine, no API calls, but needs
+real memory headroom. On a 48 GB Apple Silicon Mac with ComfyUI also
+loaded, even the 14B Hermes variant runs into peak-memory pressure
+during prompt processing. Reach for this only if you have ≥ 64 GB
+unified memory, or are willing to stop ComfyUI between turns.
+
+To run local:
 
 ```bash
 brew install llama.cpp
 
-# Q4_K_M (~8.4 GB). The right size on a 48 GB M4 with ComfyUI loaded.
 mkdir -p ~/models/hermes-4-14b
 curl -L --fail -C - --retry 5 \
     https://huggingface.co/bartowski/NousResearch_Hermes-4-14B-GGUF/resolve/main/NousResearch_Hermes-4-14B-Q4_K_M.gguf \
     -o ~/models/hermes-4-14b/NousResearch_Hermes-4-14B-Q4_K_M.gguf
-```
 
-The 36B variant (`NousResearch/Hermes-4.3-36B-GGUF`) is technically
-sharper, but on 48 GB unified memory the 22 GB model + 64K context KV
-cache + Metal-locked ComfyUI weights blow past the ceiling. 14B
-handles agentic tool-calling for this project comfortably.
-
-### 2. Start the inference server
-
-```bash
 llama-server \
     --model ~/models/hermes-4-14b/NousResearch_Hermes-4-14B-Q4_K_M.gguf \
     --alias Hermes-4-14B-Q4 \
@@ -76,60 +96,27 @@ llama-server \
     --cache-type-v q8_0
 ```
 
-Flags worth knowing:
-
-- `--alias Hermes-4-14B-Q4` — friendly name reported as the model id;
-  keeps the hermes TUI status bar readable.
-- `--ctx-size 65536` — hermes-agent requires a 64K-token context at
-  minimum (the model itself is natively 40K, llama.cpp extends via
-  RoPE; in practice we never exceed ~24K so quality stays clean).
-- `-ngl 999` — offload every layer to Metal (full GPU acceleration).
-- `--jinja` — required for tool calling; enables Jinja chat templates
-  so OpenAI-style `tool_calls` round-trip correctly.
-- `--cache-type-k q8_0 --cache-type-v q8_0` — store the KV cache in
-  8-bit instead of 16-bit; halves cache memory at negligible quality
-  cost. Important on tight RAM.
-
-This exposes an OpenAI-compatible endpoint at `http://127.0.0.1:8080`.
-
-### 3. Install hermes-agent
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
-source ~/.zshrc  # or ~/.bashrc
-```
-
-Then run `hermes model` and walk through the interactive wizard:
-
-- Pick **Custom Endpoint** (the OpenAI-compatible / VLLM / Ollama
-  category).
-- Base URL: `http://127.0.0.1:8080/v1`
-- Model name: `Hermes-4-14B-Q4` (the alias from the llama-server
-  command above; the underlying file is named differently but the
-  alias is what hermes sends to the API).
-- API key: any string (the local server doesn't check) — `sk-noauth`
-  is fine.
-- Set as default.
-
-Hermes-agent also requires a 64K-minimum context window. Hermes-4-14B
-reports a 40K window in its GGUF metadata, so override after the
-wizard:
+Then in `hermes model`, pick **Custom Endpoint**, base URL
+`http://127.0.0.1:8080/v1`, model name `Hermes-4-14B-Q4`, API key
+anything. The Hermes-4-14B GGUF reports a 40 K context in its metadata
+which is below hermes-agent's 64 K minimum, so:
 
 ```bash
 hermes config set model.context_length 65536
 hermes config set auxiliary.compression.context_length 65536
 ```
 
-### 4. Install this plugin
+### 3. Install this plugin
 
 ```bash
-git clone https://github.com/eliheuer/hermes-comfyui-theme-maker.git \
-    ~/GH/repos/hermes-comfyui-theme-maker
+# Clone wherever you keep code. The plugin will be referenced by
+# absolute path from the symlink below, so the location doesn't matter.
+git clone https://github.com/eliheuer/hermes-comfyui-theme-maker.git
+cd hermes-comfyui-theme-maker
 
 # Hermes plugin dirs must be valid Python identifiers — symlink with underscores.
 mkdir -p ~/.hermes/plugins
-ln -s ~/GH/repos/hermes-comfyui-theme-maker \
-      ~/.hermes/plugins/hermes_comfyui_theme_maker
+ln -s "$(pwd)" ~/.hermes/plugins/hermes_comfyui_theme_maker
 
 # Hermes discovers plugins in this directory but won't load them until
 # you explicitly enable them.
@@ -147,7 +134,7 @@ hermes-agent venv doesn't already have it:
 ~/.hermes/hermes-agent/venv/bin/pip install Pillow
 ```
 
-### 5. Tell the agent where your ComfyUI_frontend lives
+### 4. Tell the agent where your ComfyUI_frontend lives
 
 There's no env var or config to set up — the agent just asks. On the
 first theme request of a session, Hermes will say something like:
@@ -164,7 +151,7 @@ sessions, so you only get asked once per machine.
 > would need to plug into ComfyUI's runtime CSS injection mechanism
 > instead — that's a future direction.
 
-### 6. Start ComfyUI_frontend
+### 5. Start ComfyUI_frontend
 
 In a separate terminal:
 
@@ -250,9 +237,18 @@ comments — idempotent, removable, single source of truth.
 
 ## Tested against
 
-- ComfyUI_frontend `main`
-- ComfyUI_frontend PR #11317 branch `app-mode-semi-customizable-layout`
-  in graph mode, app mode, and builder mode
+- **LLM backend**: Kimi-K2 (Moonshot, cloud) — verified working
+  end-to-end during the hackathon. Local Hermes-4-14B GGUF also runs
+  but is memory-tight alongside ComfyUI on 48 GB hardware.
+- **ComfyUI image gen**: the workflow template wired into `tools.py`
+  targets the **Anima / Qwen** text-to-image stack
+  (`anima-preview.safetensors`, `qwen_3_06b_base.safetensors`,
+  `qwen_image_vae.safetensors`, `anima-turbo-lora-v0.1.safetensors`).
+  Other ComfyUI installs (Flux, SDXL, etc.) would need the workflow
+  template swapped — generalising this is future work.
+- **ComfyUI_frontend**: `main` and PR #11317 branch
+  `app-mode-semi-customizable-layout` in graph mode, app mode, and
+  builder mode.
 
 ## Project documentation
 
