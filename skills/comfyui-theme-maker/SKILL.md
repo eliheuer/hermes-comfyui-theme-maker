@@ -26,6 +26,24 @@ description alone — use it when ComfyUI is unreachable, the user
 declines visual research, or this is a refinement turn (see "Iteration"
 below).
 
+### Establishing the ComfyUI_frontend path (do this once)
+
+`write_comfyui_theme` and `apply_comfyui_theme` both require an explicit
+`frontend_path` argument — the absolute path to the user's
+ComfyUI_frontend checkout. The tools deliberately do not auto-detect.
+
+Before the first theme of any session:
+
+1. Check the memory tool for a key like `comfyui_frontend_path`. If it
+   exists, use that value and skip ahead to the visual-research loop.
+2. If not, ask the user explicitly: *"Where is your ComfyUI_frontend
+   checkout? (e.g. `~/code/ComfyUI_frontend`)"*. Use the clarify tool
+   if available, or ask in chat.
+3. Once they answer, save it to memory under `comfyui_frontend_path`
+   so future sessions don't have to ask again.
+4. Pass that exact value to every `write_comfyui_theme` and
+   `apply_comfyui_theme` call.
+
 ### Preferred workflow — visual-research loop
 
 1. **Call `list_comfyui_tokens(layer="all")`** to ground yourself in the
@@ -53,10 +71,12 @@ below).
    - Pick `app-mode-go-bg` as a green that has decent contrast with
      `charcoal-800`; `bg-hover` slightly lighter, `border` darker.
      Mirror for `app-mode-stop-*` in red.
-6. **Call `write_comfyui_theme(name=…, overrides=…)`.** Names omit the
-   leading `--`. Values must be concrete (hex, rgb, rgba), not `var()`.
-7. **Call `apply_comfyui_theme(name=…)`.** Idempotent; one theme at a
-   time. Vite HMR live-reloads.
+6. **Call `write_comfyui_theme(name=…, overrides=…, frontend_path=…)`.**
+   Names omit the leading `--`. Values must be concrete (hex, rgb, rgba),
+   not `var()`. `frontend_path` is the user's checkout you established
+   above.
+7. **Call `apply_comfyui_theme(name=…, frontend_path=…)`.** Idempotent;
+   one theme at a time. Vite HMR live-reloads.
 8. **Briefly summarize.** One short paragraph: mode, where the palette
    came from (the generated reference), accent picks, any notable
    trade-offs. The user can then iterate ("warmer", "less saturated",
@@ -231,10 +251,12 @@ sienna with brighter/darker steps derived. Gold ramp from the amber.
 App-mode Run / Stop sit at warm green / warm red contrasting against
 the dark background.
 
-**Steps 6 and 7 — write and apply.**
+**Steps 6 and 7 — write and apply** (assuming `frontend_path` was
+established earlier as e.g. `/Users/alice/code/ComfyUI_frontend`):
 
     write_comfyui_theme(
       name="campfire-mood",
+      frontend_path="/Users/alice/code/ComfyUI_frontend",
       overrides={
         "color-charcoal-100": "#8a7060",
         "color-charcoal-200": "#6f594a",
@@ -259,7 +281,8 @@ the dark background.
       }
     )
 
-Then `apply_comfyui_theme(name="campfire-mood")` and summarize:
+Then `apply_comfyui_theme(name="campfire-mood", frontend_path=…)` and
+summarize:
 
 > Generated a campfire reference (autumn forest, ember light) and
 > mapped its palette onto the theme: warm dark neutrals from the
