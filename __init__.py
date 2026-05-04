@@ -42,3 +42,9 @@ def register(ctx):
         schema=schemas.EXTRACT_PALETTE_FROM_IMAGE,
         handler=tools.extract_palette_from_image,
     )
+    ctx.register_tool(
+        name="render_theme_swatch",
+        toolset=TOOLSET,
+        schema=schemas.RENDER_THEME_SWATCH,
+        handler=tools.render_theme_swatch,
+    )

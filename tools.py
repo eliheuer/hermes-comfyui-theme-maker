@@ -51,6 +51,7 @@ _VALID_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _SENTINEL_BEGIN = "/* hermes-comfyui-theme-maker:active */"
 _SENTINEL_END = "/* hermes-comfyui-theme-maker:end */"
 _DESIGN_SYSTEM_IMPORT = "@import '@comfyorg/design-system/css/style.css';"
+_TOKEN_LINE_RE = re.compile(r"--([a-z][a-z0-9-]*):\s*(#[0-9a-fA-F]{6})")
 
 
 def list_tokens(args: dict, **kwargs) -> str:
@@ -394,6 +395,87 @@ def generate_mood_image(args: dict, **kwargs) -> str:
             "seed": seed,
             "size": size,
             "elapsed_seconds": round(time.time() - started, 2),
+        }
+    )
+
+
+def _categorize_token(token: str) -> str:
+    if token.startswith("color-charcoal-"):
+        return "Charcoal (dark neutrals)"
+    if token.startswith("color-smoke-"):
+        return "Smoke (light neutrals)"
+    if token.startswith("app-mode-"):
+        return "App mode"
+    if token.startswith("color-layout-"):
+        return "Layout"
+    if token.startswith("color-"):
+        return "Accents"
+    return "Other"
+
+
+_CATEGORY_ORDER = [
+    "Charcoal (dark neutrals)",
+    "Smoke (light neutrals)",
+    "Accents",
+    "App mode",
+    "Layout",
+    "Other",
+]
+
+
+def _ansi_swatch(hex_value: str, width: int = 4) -> str:
+    """Return an ANSI 24-bit colored block of the given width (in cells)."""
+    r = int(hex_value[1:3], 16)
+    g = int(hex_value[3:5], 16)
+    b = int(hex_value[5:7], 16)
+    return f"\033[48;2;{r};{g};{b}m{' ' * width}\033[0m"
+
+
+def render_theme_swatch(args: dict, **kwargs) -> str:
+    args = args or {}
+    name = (args.get("name") or "").strip()
+    raw_path = (args.get("frontend_path") or "").strip()
+    if not _VALID_SLUG.match(name):
+        return json.dumps({"error": f"invalid theme slug: {name!r}"})
+
+    frontend, err = _resolve_frontend(raw_path)
+    if err:
+        return json.dumps({"error": err})
+
+    theme_file = _themes_dir(frontend) / f"{name}.css"
+    if not theme_file.exists():
+        return json.dumps({"error": f"theme not found: {theme_file}"})
+
+    text = theme_file.read_text()
+    matches = _TOKEN_LINE_RE.findall(text)
+    if not matches:
+        return json.dumps(
+            {"error": f"no token overrides found in {theme_file}"}
+        )
+
+    groups: dict = {}
+    for token, hex_val in matches:
+        groups.setdefault(_categorize_token(token), []).append(
+            (token, hex_val.lower())
+        )
+
+    lines = ["", f"  \033[1m{name}\033[0m", f"  {len(matches)} overrides", ""]
+    for category in _CATEGORY_ORDER:
+        if category not in groups:
+            continue
+        lines.append(f"  \033[1m{category}\033[0m")
+        for token, hex_val in sorted(groups[category]):
+            lines.append(
+                f"  {_ansi_swatch(hex_val)}  {hex_val}  {token}"
+            )
+        lines.append("")
+
+    return json.dumps(
+        {
+            "ok": True,
+            "name": name,
+            "tokens_in_theme": len(matches),
+            "swatch": "\n".join(lines),
         }
     )
 

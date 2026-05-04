@@ -77,7 +77,11 @@ Before the first theme of any session:
    above.
 7. **Call `apply_comfyui_theme(name=…, frontend_path=…)`.** Idempotent;
    one theme at a time. Vite HMR live-reloads.
-8. **Briefly summarize.** One short paragraph: mode, where the palette
+8. **Call `render_theme_swatch(name=…, frontend_path=…)`** to render
+   the theme as ANSI-colored blocks grouped by category. Include the
+   returned `swatch` field **verbatim** in your reply (don't re-format
+   it — the escape codes render the colors in the user's terminal).
+9. **Briefly summarize.** One short paragraph: mode, where the palette
    came from (the generated reference), accent picks, any notable
    trade-offs. The user can then iterate ("warmer", "less saturated",
    "more contrast").

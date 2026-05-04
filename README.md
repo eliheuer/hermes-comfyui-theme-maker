@@ -12,7 +12,7 @@ Built for the Hermes Agent Creative Hackathon. Still rough around the edges.
 
 - A **skill** (`comfyui-theme-maker`) that loads the canonical ComfyUI token
   taxonomy and design heuristics into Hermes' context.
-- Five **tools** the agent calls in an agentic loop:
+- Six **tools** the agent calls in an agentic loop:
   - `list_comfyui_tokens` — return every overridable CSS custom property.
   - `generate_mood_image` — generate a reference image via your local
     ComfyUI text-to-image stack to anchor palette decisions in real
@@ -23,6 +23,9 @@ Built for the Hermes Agent Creative Hackathon. Still rough around the edges.
     checkout.
   - `apply_comfyui_theme` — activate the theme via a single `@import`,
     picked up by Vite HMR.
+  - `render_theme_swatch` — render a theme as ANSI-colored blocks in
+    the terminal, grouped by category. The agent calls this after
+    apply so each generation ends with a visual preview in your TUI.
 - Targets the three-layer token surface: **palette** (foundational color
   ramps), **semantic** (cascades automatically), and the new **app-mode**
   tokens introduced by ComfyUI_frontend PR #11317

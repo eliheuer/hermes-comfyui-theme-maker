@@ -150,6 +150,38 @@ GENERATE_MOOD_IMAGE = {
     },
 }
 
+RENDER_THEME_SWATCH = {
+    "name": "render_theme_swatch",
+    "description": (
+        "Render a previously-written theme as ANSI-colored swatches for "
+        "terminal display. Returns a multi-line string showing each token "
+        "as a colored block grouped by category (charcoal / smoke / "
+        "accents / app-mode / layout). Call this after apply_comfyui_theme "
+        "and include the returned 'swatch' field verbatim in your reply "
+        "so the user gets immediate visual feedback. Also useful for "
+        "debugging an existing theme."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": (
+                    "Theme slug previously passed to write_comfyui_theme."
+                ),
+            },
+            "frontend_path": {
+                "type": "string",
+                "description": (
+                    "Same ComfyUI_frontend checkout path used in "
+                    "write_comfyui_theme."
+                ),
+            },
+        },
+        "required": ["name", "frontend_path"],
+    },
+}
+
 EXTRACT_PALETTE_FROM_IMAGE = {
     "name": "extract_palette_from_image",
     "description": (

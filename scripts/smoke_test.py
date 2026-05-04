@@ -256,7 +256,7 @@ def main() -> int:
             tools.write_theme(
                 {
                     "name": "smoke-test-2",
-                    "overrides": {"color-charcoal-800": "#101"},
+                    "overrides": {"color-charcoal-800": "#101010"},
                     "frontend_path": str(frontend),
                 }
             )
@@ -279,6 +279,33 @@ def main() -> int:
         _label("apply_theme(missing theme)")
         payload = json.loads(
             tools.apply_theme(
+                {"name": "does-not-exist", "frontend_path": str(frontend)}
+            )
+        )
+        _expect_error(payload, "rejects missing theme file")
+
+        _label("render_theme_swatch(valid)")
+        payload = json.loads(
+            tools.render_theme_swatch(
+                {"name": "smoke-test-2", "frontend_path": str(frontend)}
+            )
+        )
+        if (
+            payload.get("ok")
+            and payload.get("tokens_in_theme")
+            and "swatch" in payload
+            and "\033[48;2;" in payload["swatch"]
+        ):
+            _ok(
+                f"rendered swatch ({payload['tokens_in_theme']} tokens, "
+                f"{len(payload['swatch'])} bytes of ANSI)"
+            )
+        else:
+            _bad(f"unexpected swatch payload: {payload!r}")
+
+        _label("render_theme_swatch(missing theme)")
+        payload = json.loads(
+            tools.render_theme_swatch(
                 {"name": "does-not-exist", "frontend_path": str(frontend)}
             )
         )
