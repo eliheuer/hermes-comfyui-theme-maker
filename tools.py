@@ -399,12 +399,65 @@ def _load_palette(name):
         return None, _err(f"could not read theme JSON: {e}")
 
 
-_GROUP_LABELS = {
-    "comfy_base": "Comfy base — UI chrome",
-    "litegraph_base": "LiteGraph — canvas",
-    "node_slot": "Node slot — connection types",
-}
-_GROUP_ORDER = ["comfy_base", "litegraph_base", "node_slot"]
+_BOLD = "\033[1m"
+_DIM = "\033[2m"
+_RESET = "\033[0m"
+
+
+def _format_token_line(key, value, override):
+    """Format one token line in the swatch.
+
+    `override=True` → token IS in the theme (show colored block + value).
+    `override=False` → token is INHERITED from default (show muted name).
+    """
+    desc = inventory.KEY_DESCRIPTIONS.get(key, "")
+    if not override:
+        return (
+            f"  {_DIM}    ·                       "
+            f"{key:<35}{desc}{_RESET}"
+        )
+    if isinstance(value, str) and _HEX_RE.match(value):
+        return (
+            f"  {_ansi_swatch(value)}  {value}  "
+            f"{key:<35}{_DIM}{desc}{_RESET}"
+        )
+    # Non-hex value (e.g. rgba(...) for bar-shadow, base64 PNG, enum int).
+    truncated = str(value)
+    if len(truncated) > 22:
+        truncated = truncated[:19] + "..."
+    return (
+        f"  {_DIM}    ·{_RESET}  {truncated:<22}  "
+        f"{key:<35}{_DIM}{desc}{_RESET}"
+    )
+
+
+def _render_group_with_roles(group_name, items, role_buckets):
+    """Render one schema group, partitioned into role buckets."""
+    lines = []
+    overridden_keys = set(items.keys())
+    bucket_keys = {k for _, keys in role_buckets for k in keys}
+    # Tokens that are present but don't fit any documented bucket
+    # — show under "Other" to keep them visible.
+    extras = sorted(k for k in overridden_keys if k not in bucket_keys)
+
+    for label, keys in role_buckets:
+        present = [k for k in keys if k in overridden_keys]
+        absent = [k for k in keys if k not in overridden_keys]
+        if not present and not absent:
+            continue
+        lines.append(f"  {_BOLD}{label}{_RESET}")
+        for key in present:
+            lines.append(_format_token_line(key, items[key], override=True))
+        for key in absent:
+            lines.append(_format_token_line(key, None, override=False))
+        lines.append("")
+
+    if extras:
+        lines.append(f"  {_BOLD}Other (not in role buckets){_RESET}")
+        for key in extras:
+            lines.append(_format_token_line(key, items[key], override=True))
+        lines.append("")
+    return lines
 
 
 def render_theme_swatch(args, **kwargs):
@@ -417,29 +470,64 @@ def render_theme_swatch(args, **kwargs):
         return err
 
     colors = palette.get("colors") or {}
-    total = sum(len(colors.get(g, {})) for g in _GROUP_ORDER)
+    cb = colors.get("comfy_base") or {}
+    lg = colors.get("litegraph_base") or {}
+    ns = colors.get("node_slot") or {}
+    total = len(cb) + len(lg) + len(ns)
     light = palette.get("light_theme")
-    flag = " · light" if light else (" · dark" if light is False else "")
+    flag = "light" if light else ("dark" if light is False else "no flag")
+
+    n_cb_total = len(inventory.COMFY_BASE_KEYS)
+    n_lg_total = len(inventory.LITEGRAPH_BASE_KEYS)
+    n_ns_total = len(inventory.NODE_SLOT_KEYS)
 
     lines = [
         "",
-        f"  \033[1m{palette.get('name') or palette['id']}\033[0m{flag}",
-        f"  {total} overrides",
+        f"  {_BOLD}{palette.get('name') or palette['id']}{_RESET}"
+        f"  {_DIM}· {flag} theme · {total} overrides{_RESET}",
+        "",
+        f"  {_DIM}Coverage: "
+        f"comfy_base {len(cb)}/{n_cb_total}  ·  "
+        f"litegraph_base {len(lg)}/{n_lg_total}  ·  "
+        f"node_slot {len(ns)}/{n_ns_total}{_RESET}",
+        f"  {_DIM}Tokens not overridden inherit from "
+        f"DEFAULT_{'LIGHT' if light else 'DARK'}_COLOR_PALETTE.{_RESET}",
         "",
     ]
-    for group in _GROUP_ORDER:
-        items = colors.get(group) or {}
-        if not items:
-            continue
-        lines.append(f"  \033[1m{_GROUP_LABELS[group]}\033[0m")
-        for key in sorted(items):
-            value = items[key]
-            if isinstance(value, str) and _HEX_RE.match(value):
-                lines.append(
-                    f"  {_ansi_swatch(value)}  {value}  {key}"
-                )
-            else:
-                lines.append(f"     ·       {value!r:>16}  {key}")
+
+    # Comfy base — UI chrome, role-grouped
+    if cb:
+        lines.append(f"  {_BOLD}╭── COMFY BASE — UI chrome ──{_RESET}")
+        lines.append("")
+        lines.extend(
+            _render_group_with_roles("comfy_base", cb,
+                                     inventory.COMFY_BASE_ROLES)
+        )
+
+    # LiteGraph base — canvas, role-grouped
+    if lg:
+        lines.append(f"  {_BOLD}╭── LITEGRAPH — canvas ──{_RESET}")
+        lines.append("")
+        lines.extend(
+            _render_group_with_roles("litegraph_base", lg,
+                                     inventory.LITEGRAPH_BASE_ROLES)
+        )
+
+    # Node slot — connection types (one row per type, no role-grouping)
+    if ns:
+        lines.append(f"  {_BOLD}╭── NODE SLOT — connection types ──{_RESET}")
+        lines.append("")
+        for key in inventory.NODE_SLOT_KEYS:
+            present = key in ns
+            value = ns.get(key)
+            lines.append(_format_token_line(key, value, present))
+        lines.append("")
+    elif total > 0:
+        lines.append(
+            f"  {_DIM}Node slot connection-type colors all inherited "
+            f"from default ({n_ns_total} keys: CLIP, MODEL, IMAGE, "
+            f"LATENT, ...).{_RESET}"
+        )
         lines.append("")
 
     return json.dumps({
