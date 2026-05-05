@@ -1,0 +1,34 @@
+{
+  "id": "campfire",
+  "name": "Campfire",
+  "light_theme": false,
+  "colors": {
+    "node_slot": {},
+    "litegraph_base": {
+      "NODE_DEFAULT_BGCOLOR": "#2b1e16",
+      "NODE_TITLE_COLOR": "#bf7c49",
+      "WIDGET_BGCOLOR": "#1e1510",
+      "LINK_COLOR": "#793d26",
+      "CLEAR_BACKGROUND_COLOR": "#15100c"
+    },
+    "comfy_base": {
+      "bg-color": "#15100c",
+      "fg-color": "#f5e6d2",
+      "comfy-menu-bg": "#0f0a08",
+      "comfy-menu-secondary-bg": "#1e1510",
+      "comfy-input-bg": "#0a0606",
+      "input-text": "#e6cfb6",
+      "descrip-text": "#a08070",
+      "drag-text": "#c9b8a4",
+      "error-text": "#ff5050",
+      "border-color": "#3a2820",
+      "tr-even-bg-color": "#1e1510",
+      "tr-odd-bg-color": "#2b1e16",
+      "content-bg": "#2b1e16",
+      "content-fg": "#f5e6d2",
+      "content-hover-bg": "#3a2820",
+      "content-hover-fg": "#f5e6d2",
+      "bar-shadow": "rgba(16, 10, 8, 0.5) 0 0 0.5rem"
+    }
+  }
+}

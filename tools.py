@@ -1,5 +1,6 @@
-"""Tool implementations: list/write/apply themes, generate mood images,
-extract dominant palette colors, render swatches and infographics.
+"""Tool implementations: list canonical palette keys, generate mood
+images, extract dominant palette colors, write/apply/render themes
+in the canonical ComfyUI palette JSON format.
 """
 
 import copy
@@ -17,10 +18,7 @@ from . import token_inventory as inventory
 
 
 _VALID_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-_SENTINEL_BEGIN = "/* hermes-comfyui-theme-maker:active */"
-_SENTINEL_END = "/* hermes-comfyui-theme-maker:end */"
-_DESIGN_SYSTEM_IMPORT = "@import '@comfyorg/design-system/css/style.css';"
-_TOKEN_LINE_RE = re.compile(r"--([a-z][a-z0-9-]*):\s*(#[0-9a-fA-F]{6})")
+_HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 def _err(msg, **extra):
@@ -38,154 +36,6 @@ def _missing_dep_error(pkg):
     )
 
 
-def _resolve_frontend(raw):
-    if not raw:
-        return None, "frontend_path is required"
-    path = Path(raw).expanduser().resolve()
-    if not path.exists():
-        return None, f"frontend_path does not exist: {path}"
-    if not (path / "src" / "assets" / "css" / "style.css").exists():
-        return None, (
-            f"{path} does not look like a ComfyUI_frontend checkout "
-            f"(missing src/assets/css/style.css)"
-        )
-    return path, None
-
-
-def _themes_dir(frontend):
-    d = frontend / "src" / "assets" / "css" / "themes"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
-def _style_css(frontend):
-    return frontend / "src" / "assets" / "css" / "style.css"
-
-
-def _categorize_token(token):
-    if token.startswith("color-charcoal-"):
-        return "Charcoal (dark neutrals)"
-    if token.startswith("color-smoke-"):
-        return "Smoke (light neutrals)"
-    if token.startswith("app-mode-"):
-        return "App mode"
-    if token.startswith("color-layout-"):
-        return "Layout"
-    if token.startswith("color-"):
-        return "Accents"
-    return "Other"
-
-
-_CATEGORY_ORDER = [
-    "Charcoal (dark neutrals)",
-    "Smoke (light neutrals)",
-    "Accents",
-    "App mode",
-    "Layout",
-    "Other",
-]
-
-
-def _resolve_named_theme(args, require_exists=True):
-    args = args or {}
-    name = (args.get("name") or "").strip()
-    raw_path = (args.get("frontend_path") or "").strip()
-    if not _VALID_SLUG.match(name):
-        return None, None, None, _err(f"invalid theme slug: {name!r}")
-    frontend, err = _resolve_frontend(raw_path)
-    if err:
-        return None, None, None, _err(err)
-    theme_file = _themes_dir(frontend) / f"{name}.css"
-    if require_exists and not theme_file.exists():
-        return None, None, None, _err(f"theme not found: {theme_file}")
-    return name, frontend, theme_file, None
-
-
-def _load_theme_groups(theme_file):
-    matches = _TOKEN_LINE_RE.findall(theme_file.read_text())
-    if not matches:
-        return None, None, _err(f"no token overrides found in {theme_file}")
-    groups = {}
-    for token, hex_val in matches:
-        groups.setdefault(_categorize_token(token), []).append(
-            (token, hex_val.lower())
-        )
-    return matches, groups, None
-
-
-def _render_css(name, overrides):
-    body = "\n".join(f"  --{token}: {value};" for token, value in overrides.items())
-    return f"/* hermes-comfyui-theme-maker: {name} */\n:root {{\n{body}\n}}\n"
-
-
-# --- list / write / apply ------------------------------------------------
-
-def list_tokens(args, **kwargs):
-    layer = (args or {}).get("layer", "all")
-    if layer == "all":
-        rows = inventory.all_tokens()
-    else:
-        try:
-            rows = [(n, d, desc, layer) for n, d, desc in inventory.by_layer(layer)]
-        except KeyError:
-            return _err(f"unknown layer: {layer!r}")
-    payload = [
-        {"name": n, "default": d, "description": desc, "layer": lyr}
-        for n, d, desc, lyr in rows
-    ]
-    return json.dumps({"tokens": payload, "count": len(payload)})
-
-
-def write_theme(args, **kwargs):
-    name, frontend, theme_file, err = _resolve_named_theme(args, require_exists=False)
-    if err:
-        return err
-    overrides = (args or {}).get("overrides") or {}
-    if not isinstance(overrides, dict) or not overrides:
-        return _err("overrides must be a non-empty object")
-    valid = inventory.names()
-    unknown = sorted(t for t in overrides if t not in valid)
-    if unknown:
-        return _err("unknown tokens", unknown=unknown)
-    try:
-        theme_file.write_text(_render_css(name, overrides))
-    except OSError as e:
-        return _err(f"write failed: {e}")
-    return json.dumps({
-        "ok": True,
-        "path": str(theme_file),
-        "tokens_written": len(overrides),
-    })
-
-
-def apply_theme(args, **kwargs):
-    name, frontend, _theme_file, err = _resolve_named_theme(args, require_exists=True)
-    if err:
-        return err
-    style = _style_css(frontend)
-    text = style.read_text()
-    block = f"{_SENTINEL_BEGIN}\n@import './themes/{name}.css';\n{_SENTINEL_END}"
-    pattern = re.compile(
-        re.escape(_SENTINEL_BEGIN) + r".*?" + re.escape(_SENTINEL_END), re.DOTALL,
-    )
-    if pattern.search(text):
-        new_text = pattern.sub(block, text)
-    elif _DESIGN_SYSTEM_IMPORT in text:
-        new_text = text.replace(
-            _DESIGN_SYSTEM_IMPORT, _DESIGN_SYSTEM_IMPORT + "\n" + block, 1,
-        )
-    else:
-        new_text = block + "\n" + text
-    if new_text != text:
-        try:
-            style.write_text(new_text)
-        except OSError as e:
-            return _err(f"write failed: {e}")
-    return json.dumps({"ok": True, "active_theme": name, "style_css": str(style)})
-
-
-# --- ComfyUI image generation --------------------------------------------
-
 def _comfy_url():
     return os.environ.get(
         "HERMES_COMFYUI_API_URL", "http://127.0.0.1:8188"
@@ -201,13 +51,175 @@ def _cache_dir():
     return d
 
 
+def _theme_path(name):
+    return _cache_dir() / f"{name}.json"
+
+
+# --- ComfyUI HTTP helpers (used by image gen + settings API) -------------
+
+def _http_post(path, body, timeout=30):
+    req = urllib.request.Request(
+        _comfy_url() + path,
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def _http_get_bytes(path, timeout=30):
+    with urllib.request.urlopen(_comfy_url() + path, timeout=timeout) as r:
+        return r.read()
+
+
+def _http_get_json(path, timeout=30):
+    raw = _http_get_bytes(path, timeout)
+    if not raw:
+        return None
+    return json.loads(raw)
+
+
+# --- list canonical palette keys ----------------------------------------
+
+def list_comfyui_tokens(args, **kwargs):
+    group = (args or {}).get("group", "all")
+    groups = inventory.all_groups()
+    if group == "all":
+        return json.dumps({
+            "node_slot": list(groups["node_slot"]),
+            "litegraph_base": list(groups["litegraph_base"]),
+            "comfy_base_required": list(inventory.COMFY_BASE_REQUIRED_KEYS),
+            "comfy_base_optional": list(inventory.COMFY_BASE_OPTIONAL_KEYS),
+            "total_keys": (
+                len(groups["node_slot"])
+                + len(groups["litegraph_base"])
+                + len(groups["comfy_base"])
+            ),
+        })
+    if group not in groups:
+        return _err(f"unknown group: {group!r}",
+                    valid_groups=["all", *groups.keys()])
+    return json.dumps({group: list(groups[group])})
+
+
+# --- write theme: validate + save palette JSON to cache -----------------
+
+def _validate_palette(palette):
+    if not isinstance(palette, dict):
+        return "palette must be an object"
+    if "id" not in palette or not isinstance(palette["id"], str):
+        return "palette.id is required (string)"
+    if not _VALID_SLUG.match(palette["id"]):
+        return f"palette.id must match {_VALID_SLUG.pattern!r}"
+    if "name" not in palette or not isinstance(palette["name"], str):
+        return "palette.name is required (string)"
+    if "colors" not in palette or not isinstance(palette["colors"], dict):
+        return "palette.colors is required (object)"
+    colors = palette["colors"]
+    for group_name in ("node_slot", "litegraph_base", "comfy_base"):
+        if group_name not in colors:
+            return f"palette.colors.{group_name} is required (may be {{}})"
+        if not isinstance(colors[group_name], dict):
+            return f"palette.colors.{group_name} must be an object"
+
+    valid_keys = inventory.all_groups()
+    for group_name, keys in colors.items():
+        for key in keys:
+            if group_name in valid_keys and key not in valid_keys[group_name]:
+                return (
+                    f"unknown key in {group_name}: {key!r} "
+                    f"(see list_comfyui_tokens)"
+                )
+    return None
+
+
+def write_comfyui_theme(args, **kwargs):
+    args = args or {}
+    palette = args.get("palette")
+    err = _validate_palette(palette)
+    if err:
+        return _err(err)
+
+    name = palette["id"]
+    out = _theme_path(name)
+    try:
+        out.write_text(json.dumps(palette, indent=2))
+    except OSError as e:
+        return _err(f"write failed: {e}")
+
+    counts = {
+        g: len(palette["colors"].get(g, {}))
+        for g in ("node_slot", "litegraph_base", "comfy_base")
+    }
+    return json.dumps({
+        "ok": True,
+        "id": name,
+        "path": str(out),
+        "overrides": counts,
+    })
+
+
+# --- apply theme: register via ComfyUI settings API + activate -----------
+
+def apply_comfyui_theme(args, **kwargs):
+    args = args or {}
+    name = (args.get("name") or "").strip()
+    if not _VALID_SLUG.match(name):
+        return _err(f"invalid theme id: {name!r}")
+    theme_file = _theme_path(name)
+    if not theme_file.exists():
+        return _err(
+            f"theme not found in cache: {theme_file}. "
+            "Call write_comfyui_theme first."
+        )
+    try:
+        palette = json.loads(theme_file.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        return _err(f"could not read theme JSON: {e}")
+
+    try:
+        existing = _http_get_json(
+            "/api/settings/Comfy.CustomColorPalettes"
+        ) or {}
+    except (urllib.error.URLError, OSError) as e:
+        return _err(
+            f"ComfyUI not reachable at {_comfy_url()}: {e}. "
+            "Start ComfyUI and try again."
+        )
+    if not isinstance(existing, dict):
+        existing = {}
+    existing[palette["id"]] = palette
+
+    try:
+        _http_post("/api/settings/Comfy.CustomColorPalettes", existing)
+        _http_post("/api/settings/Comfy.ColorPalette", palette["id"])
+    except (urllib.error.URLError, OSError) as e:
+        return _err(f"settings POST failed: {e}")
+
+    return json.dumps({
+        "ok": True,
+        "id": palette["id"],
+        "active": True,
+        "registered_count": len(existing),
+        "note": (
+            "Theme registered as a custom palette and set active. "
+            "If the theme menu still shows the previous palette, "
+            "open Settings → Appearance and toggle palettes once — "
+            "ComfyUI's frontend hydrates customs at GraphCanvas mount, "
+            "so a fresh page load picks them up automatically."
+        ),
+    })
+
+
+# --- ComfyUI image generation (unchanged from previous version) ---------
+
 _QUALITY_PREFIX = "masterpiece, best quality, score_7, safe, anime, "
 _DEFAULT_NEGATIVE = (
     "worst quality, low quality, score_1, score_2, score_3, "
     "blurry, jpeg artifacts, sepia"
 )
 
-# Prompt-format Anima/Qwen workflow (subgraph flattened).
 _ANIMA_WORKFLOW = {
     "1": {"class_type": "UNETLoader", "inputs": {"unet_name": "anima-preview.safetensors", "weight_dtype": "default"}},
     "2": {"class_type": "CLIPLoader", "inputs": {"clip_name": "qwen_3_06b_base.safetensors", "type": "stable_diffusion", "device": "default"}},
@@ -235,22 +247,6 @@ def _build_workflow(prompt, size, seed):
     return wf
 
 
-def _comfy_post(path, body, timeout=30):
-    req = urllib.request.Request(
-        _comfy_url() + path,
-        data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read())
-
-
-def _comfy_get_bytes(path, timeout=30):
-    with urllib.request.urlopen(_comfy_url() + path, timeout=timeout) as r:
-        return r.read()
-
-
 def generate_mood_image(args, **kwargs):
     args = args or {}
     prompt = (args.get("prompt") or "").strip()
@@ -267,15 +263,16 @@ def generate_mood_image(args, **kwargs):
     started = time.time()
     workflow = _build_workflow(prompt, size, seed)
     try:
-        submission = _comfy_post(
+        submission = json.loads(_http_post(
             "/prompt",
             {"prompt": workflow, "client_id": "hermes-comfyui-theme-maker"},
-        )
+        ))
     except (urllib.error.URLError, OSError) as e:
         return _err(f"ComfyUI not reachable at {_comfy_url()}: {e}")
 
     if submission.get("node_errors"):
-        return _err("ComfyUI rejected the workflow", node_errors=submission["node_errors"])
+        return _err("ComfyUI rejected the workflow",
+                    node_errors=submission["node_errors"])
     prompt_id = submission.get("prompt_id")
     if not prompt_id:
         return _err("ComfyUI did not return a prompt_id", raw=submission)
@@ -284,10 +281,10 @@ def generate_mood_image(args, **kwargs):
     image_ref = None
     while time.time() < deadline:
         try:
-            history = json.loads(_comfy_get_bytes(f"/history/{prompt_id}"))
+            history = _http_get_json(f"/history/{prompt_id}")
         except (urllib.error.URLError, OSError) as e:
             return _err(f"history poll failed: {e}")
-        record = history.get(prompt_id)
+        record = (history or {}).get(prompt_id)
         if record and record.get("status", {}).get("completed"):
             for _node_id, output in (record.get("outputs") or {}).items():
                 images = output.get("images") or []
@@ -306,7 +303,7 @@ def generate_mood_image(args, **kwargs):
         "subfolder": image_ref.get("subfolder", ""),
     })
     try:
-        data = _comfy_get_bytes(f"/view?{qs}")
+        data = _http_get_bytes(f"/view?{qs}")
     except (urllib.error.URLError, OSError) as e:
         return _err(f"failed to fetch image: {e}")
 
@@ -326,7 +323,7 @@ def generate_mood_image(args, **kwargs):
     })
 
 
-# --- palette extraction ---------------------------------------------------
+# --- palette extraction --------------------------------------------------
 
 def extract_palette_from_image(args, **kwargs):
     args = args or {}
@@ -392,27 +389,63 @@ def _ansi_swatch(hex_value, width=4):
     return f"\033[48;2;{r};{g};{b}m{' ' * width}\033[0m"
 
 
+def _load_palette(name):
+    theme_file = _theme_path(name)
+    if not theme_file.exists():
+        return None, _err(f"theme not found in cache: {theme_file}")
+    try:
+        return json.loads(theme_file.read_text()), None
+    except (OSError, json.JSONDecodeError) as e:
+        return None, _err(f"could not read theme JSON: {e}")
+
+
+_GROUP_LABELS = {
+    "comfy_base": "Comfy base — UI chrome",
+    "litegraph_base": "LiteGraph — canvas",
+    "node_slot": "Node slot — connection types",
+}
+_GROUP_ORDER = ["comfy_base", "litegraph_base", "node_slot"]
+
+
 def render_theme_swatch(args, **kwargs):
-    name, _frontend, theme_file, err = _resolve_named_theme(args, require_exists=True)
-    if err:
-        return err
-    matches, groups, err = _load_theme_groups(theme_file)
+    args = args or {}
+    name = (args.get("name") or "").strip()
+    if not _VALID_SLUG.match(name):
+        return _err(f"invalid theme id: {name!r}")
+    palette, err = _load_palette(name)
     if err:
         return err
 
-    lines = ["", f"  \033[1m{name}\033[0m", f"  {len(matches)} overrides", ""]
-    for category in _CATEGORY_ORDER:
-        if category not in groups:
+    colors = palette.get("colors") or {}
+    total = sum(len(colors.get(g, {})) for g in _GROUP_ORDER)
+    light = palette.get("light_theme")
+    flag = " · light" if light else (" · dark" if light is False else "")
+
+    lines = [
+        "",
+        f"  \033[1m{palette.get('name') or palette['id']}\033[0m{flag}",
+        f"  {total} overrides",
+        "",
+    ]
+    for group in _GROUP_ORDER:
+        items = colors.get(group) or {}
+        if not items:
             continue
-        lines.append(f"  \033[1m{category}\033[0m")
-        for token, hex_val in sorted(groups[category]):
-            lines.append(f"  {_ansi_swatch(hex_val)}  {hex_val}  {token}")
+        lines.append(f"  \033[1m{_GROUP_LABELS[group]}\033[0m")
+        for key in sorted(items):
+            value = items[key]
+            if isinstance(value, str) and _HEX_RE.match(value):
+                lines.append(
+                    f"  {_ansi_swatch(value)}  {value}  {key}"
+                )
+            else:
+                lines.append(f"     ·       {value!r:>16}  {key}")
         lines.append("")
 
     return json.dumps({
         "ok": True,
-        "name": name,
-        "tokens_in_theme": len(matches),
+        "id": palette["id"],
+        "tokens_in_theme": total,
         "swatch": "\n".join(lines),
     })
 
@@ -425,10 +458,11 @@ _IMAGE_MARGIN = 60
 
 
 def render_theme_image(args, **kwargs):
-    name, _frontend, theme_file, err = _resolve_named_theme(args, require_exists=True)
-    if err:
-        return err
-    matches, groups, err = _load_theme_groups(theme_file)
+    args = args or {}
+    name = (args.get("name") or "").strip()
+    if not _VALID_SLUG.match(name):
+        return _err(f"invalid theme id: {name!r}")
+    palette, err = _load_palette(name)
     if err:
         return err
 
@@ -437,12 +471,24 @@ def render_theme_image(args, **kwargs):
     except ImportError:
         return _missing_dep_error("drawbot-skia")
 
-    raw_output = ((args or {}).get("output_path") or "").strip()
+    raw_output = (args.get("output_path") or "").strip()
     if raw_output:
         out_path = Path(raw_output).expanduser().resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)
     else:
         out_path = _cache_dir() / f"{name}.png"
+
+    colors = palette.get("colors") or {}
+
+    def hex_items(group):
+        return sorted(
+            (k, v)
+            for k, v in (colors.get(group) or {}).items()
+            if isinstance(v, str) and _HEX_RE.match(v)
+        )
+
+    sections = [(group, hex_items(group)) for group in _GROUP_ORDER]
+    total = sum(len(items) for _g, items in sections)
 
     def yflip(y_top):
         return _IMAGE_SIZE - y_top
@@ -459,27 +505,29 @@ def render_theme_image(args, **kwargs):
         db.fontSize(size)
         db.text(text, (x, yflip(y_top_baseline)))
 
-    def draw_swatch(x, y_top, w, h, hex_val, label_token):
+    def draw_swatch(x, y_top, w, h, hex_val, label):
         fill_hex(hex_val)
         rect_top(x, y_top, w, h)
         text_color = "#0a0a0a" if _hex_luminance(hex_val) > 0.55 else "#f5f5f5"
         fill_hex(text_color)
         text_top(hex_val, x + 14, y_top + 30, "Helvetica-Bold", 20)
-        text_top(label_token, x + 14, y_top + 52, "Helvetica", 14)
+        text_top(label, x + 14, y_top + 52, "Helvetica", 14)
 
-    def draw_section(title, swatches, y_top, cols=4, swatch_h=78, gutter=14):
+    def draw_section(title, items, y_top, cols=4, swatch_h=78, gutter=14):
+        if not items:
+            return y_top
         fill_hex(_IMAGE_FG)
         text_top(title, _IMAGE_MARGIN, y_top + 18, "Helvetica-Bold", 20)
         y_grid = y_top + 36
         inner = _IMAGE_SIZE - _IMAGE_MARGIN * 2
         swatch_w = (inner - gutter * (cols - 1)) // cols
-        for i, (token, hex_val) in enumerate(swatches):
+        for i, (key, hex_val) in enumerate(items):
             col = i % cols
             row = i // cols
             sx = _IMAGE_MARGIN + col * (swatch_w + gutter)
             sy = y_grid + row * (swatch_h + gutter)
-            draw_swatch(sx, sy, swatch_w, swatch_h, hex_val, token)
-        rows = (len(swatches) + cols - 1) // cols
+            draw_swatch(sx, sy, swatch_w, swatch_h, hex_val, key)
+        rows = (len(items) + cols - 1) // cols
         return y_grid + rows * (swatch_h + gutter) + 18
 
     db.newDrawing()
@@ -488,25 +536,20 @@ def render_theme_image(args, **kwargs):
     db.rect(0, 0, _IMAGE_SIZE, _IMAGE_SIZE)
 
     fill_hex(_IMAGE_FG)
-    text_top(name, _IMAGE_MARGIN, 90, "Helvetica-Bold", 56)
+    text_top(palette.get("name") or palette["id"], _IMAGE_MARGIN, 90,
+             "Helvetica-Bold", 56)
     fill_hex(_IMAGE_MUTED)
+    light = palette.get("light_theme")
+    flag = "light" if light else ("dark" if light is False else "")
+    suffix = f"{flag} · " if flag else ""
     text_top(
-        f"{len(matches)} token overrides · hermes-comfyui-theme-maker",
+        f"{suffix}{total} overrides · hermes-comfyui-theme-maker",
         _IMAGE_MARGIN, 125, "Helvetica", 18,
     )
 
     y = 160
-    if "Charcoal (dark neutrals)" in groups:
-        ramp = sorted(groups["Charcoal (dark neutrals)"])
-        stripe_w = (_IMAGE_SIZE - _IMAGE_MARGIN * 2) // len(ramp)
-        for i, (_token, hex_val) in enumerate(ramp):
-            fill_hex(hex_val)
-            rect_top(_IMAGE_MARGIN + i * stripe_w, y, stripe_w, 50)
-        y += 80
-
-    for category in _CATEGORY_ORDER:
-        if category in groups:
-            y = draw_section(category, sorted(groups[category]), y)
+    for title, items in sections:
+        y = draw_section(_GROUP_LABELS[title], items, y)
 
     fill_hex(_IMAGE_MUTED)
     text_top(
@@ -521,8 +564,8 @@ def render_theme_image(args, **kwargs):
 
     return json.dumps({
         "ok": True,
-        "name": name,
+        "id": palette["id"],
         "path": str(out_path),
         "size": f"{_IMAGE_SIZE}x{_IMAGE_SIZE}",
-        "tokens_in_theme": len(matches),
+        "tokens_in_theme": total,
     })

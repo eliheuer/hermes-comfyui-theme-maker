@@ -1,35 +1,42 @@
 # ComfyUI Theme Maker
 
-Generate a cohesive ComfyUI frontend theme from a natural-language
-description. Output is a CSS custom-property override file written into
-the user's local ComfyUI_frontend checkout, where Vite HMR picks it up
-live.
+Generate a cohesive ComfyUI theme from a natural-language description.
+Output is a **palette JSON** in ComfyUI's canonical schema, registered
+via ComfyUI's settings HTTP API so it appears in Settings → Appearance
+→ Color Palette and persists across sessions.
+
+The output format matches every community theme repo (shahshrey,
+sizzlebop, gmorks, …) and the built-in palettes (Dark, Light, Arc,
+Nord, Solarized, Github). Themes are drop-in compatible.
 
 ## When to use
 
 User says something like "make ComfyUI dark and synthwave", "theme it
-like a 90s terminal", "warm neutrals with a gold accent."
+like a 90s terminal", "warm neutrals with a gold accent".
 
-## Establishing the frontend path
+## Tools at a glance
 
-`write_comfyui_theme`, `apply_comfyui_theme`, `render_theme_swatch`,
-and `render_theme_image` all require an explicit `frontend_path`
-argument; the tools deliberately do not auto-detect.
+- `list_comfyui_tokens(group?)` — show the schema keys per group.
+- `generate_mood_image(prompt, size?, seed?)` — Anima/Qwen reference.
+- `extract_palette_from_image(path, n_colors?)` — dominant hex colors.
+- `write_comfyui_theme(palette)` — save a palette JSON to cache.
+- `apply_comfyui_theme(name)` — register + activate via ComfyUI's
+  settings HTTP API. Theme appears in the menu.
+- `render_theme_swatch(name)` — ANSI preview in the terminal.
+- `render_theme_image(name, output_path?)` — PNG infographic, on
+  request only.
 
-On the first theme of a session, check the memory tool for
-`comfyui_frontend_path`. If absent, ask the user (e.g. *"Where is your
-ComfyUI_frontend checkout?"*), then save their answer to memory under
-that key. Pass the value to every tool call needing it.
+ComfyUI must be running locally for `generate_mood_image` and
+`apply_comfyui_theme` (default `http://127.0.0.1:8188`).
 
 ## Preferred workflow — visual research
 
-1. **`list_comfyui_tokens(layer="all")`** to ground in the real
-   override surface. Don't invent token names.
+1. **`list_comfyui_tokens(group="all")`** to see the full schema.
+   Don't invent keys.
 
-2. **Plan a mood prompt** for the diffusion model. Translate the user's
-   request into a concrete anime-styled scene: subjects, lighting,
-   color cues. The Anima/Qwen stack is anime / non-photorealistic;
-   describe accordingly. Quality boilerplate is added automatically.
+2. **Plan a mood prompt** for the diffusion model. Translate the
+   user's request into a concrete anime-styled scene; quality
+   boilerplate is added automatically.
 
 3. **`generate_mood_image(prompt=…, size=768)`** — typical latency
    10–25 s on M-series.
@@ -37,93 +44,202 @@ that key. Pass the value to every tool call needing it.
 4. **`extract_palette_from_image(path=…, n_colors=8)`** — returns
    `[{hex, percent}, …]` sorted by pixel count.
 
-5. **Map the colors onto token ramps:**
-   - Sort by perceived lightness. The 4–6 darkest become the
-     `charcoal` ramp anchors; `charcoal-800` darkest, `charcoal-100`
-     lightest. Interpolate intermediate steps so the spine is monotonic.
-   - The 1–2 most saturated colors become **one** accent ramp. Warm →
-     `coral-*` or `gold-*`. Cool → `azure-*` or `magenta-*`. Re-tune
-     all steps so hover/active stay coherent (lower number = lighter).
-   - `app-mode-go-bg` is green with decent contrast against
-     `charcoal-800`; `bg-hover` slightly lighter, `border` darker.
-     Mirror for `app-mode-stop-*` in red.
+5. **Decide light vs dark** from the average lightness of the
+   extracted colors. Most "atmosphere" prompts (campfire, deep ocean,
+   night city, moss forest) want `light_theme: false`. Sun-bleached,
+   pastel, paper-white prompts want `light_theme: true`.
 
-6. **`write_comfyui_theme(name=…, overrides=…, frontend_path=…)`**.
-   Names omit the leading `--`. Values must be concrete (hex / rgb /
-   rgba), not `var()`.
+6. **Map extracted colors onto the palette schema** (see *Mapping
+   strategy* below). For most themes, populate **comfy_base only**;
+   inherit `node_slot` and `litegraph_base` from defaults.
 
-7. **`apply_comfyui_theme(name=…, frontend_path=…)`** — idempotent;
-   one theme active at a time. Vite HMR live-reloads.
+7. **`write_comfyui_theme(palette={…})`** with a fully-shaped
+   palette object. Required fields: `id` (slug-cased), `name`,
+   `colors: { node_slot: {}, litegraph_base: {}, comfy_base: {…} }`.
+   Optional: `light_theme`. Empty groups are valid; the loader
+   inherits from defaults.
 
-8. **`render_theme_swatch(name=…, frontend_path=…)`** — include the
-   returned `swatch` field **verbatim** in your reply (the ANSI
-   escape codes render the colors in the user's terminal).
+8. **`apply_comfyui_theme(name=…)`** — registers via ComfyUI's
+   `/api/settings/Comfy.CustomColorPalettes` (merge) and sets
+   `Comfy.ColorPalette` to the new id. Theme menu picks it up after
+   page reload (or immediately on next palette switch).
 
-9. **Briefly summarize**: mode, palette source, accent picks, any
-   trade-offs. The user can then iterate.
+9. **`render_theme_swatch(name=…)`** — include the returned
+   `swatch` string **verbatim** in your reply.
 
-If the user later asks for a shareable image / social-media version,
-call `render_theme_image(name=…, frontend_path=…)` — writes a 1080×1080
-PNG. Don't call this in the default loop.
+10. **Briefly summarize**: light vs dark, palette source, key colour
+    decisions. The user can then iterate.
+
+If the user asks for a **shareable image / social-media version**,
+call `render_theme_image(name=…)`. Don't call this in the default
+loop.
 
 ## Iteration without re-generation
 
-When the user says "warmer", "more contrast", "less saturated", etc.,
-do **not** call `generate_mood_image` again. Adjust the existing
-overrides and re-call `write_comfyui_theme` (overwriting the same
-`name`) and `apply_comfyui_theme`.
+When the user says "warmer", "more contrast", "less saturated", do
+**not** call `generate_mood_image` again. Adjust the existing
+palette's hex values, re-call `write_comfyui_theme` (overwriting the
+same `id`), and `apply_comfyui_theme`.
 
 ## Fallback — text-only
 
-If `generate_mood_image` errors, skip steps 3–5 and pick palette
+If `generate_mood_image` errors, skip steps 3–4 and pick palette
 anchors from the description using the heuristics below. Tell the
 user visual research was unavailable.
 
-## Token taxonomy
+## The palette schema
 
-Three layers in ComfyUI_frontend:
+Three colour groups in `palette.colors`:
 
-- **Palette** (`_palette.css`) — `charcoal-*`, `smoke-*`, `ash-*`,
-  `electric-*`, `sapphire-*`. Overriding these cascades through every
-  semantic token.
-- **Extended palette + layout** (`design-system/style.css`) —
-  `coral-*`, `gold-*`, `azure-*`, etc. plus `color-layout-*`.
-- **App-mode** (`src/assets/css/style.css`, PR #11317) —
-  `app-mode-go-*`, `app-mode-stop-*`. Override directly.
+| Group | Keys | Role |
+|---|---|---|
+| `node_slot` | 16 (CLIP, MODEL, IMAGE, …) | Connection-type colours on the canvas. **Usually leave empty** — defaults convey type semantics users know. |
+| `litegraph_base` | 25 (NODE_TITLE_COLOR, WIDGET_BGCOLOR, …) | Canvas-internal node rendering. Only override 3-5 for theme cohesion. |
+| `comfy_base` | 17 required + 9 optional | UI chrome (panels, menus, inputs, borders). **The main theming surface.** |
 
-## Cascade rule
+Schema reminders:
 
-Always override at the **palette** layer, never at the semantic layer.
-Semantic tokens reference palette via `var()` and split between `:root`
-(light) and `.dark-theme` (dark) blocks, so overriding `charcoal-*`
-applies in dark mode (invisible in light) and `smoke-*` is the mirror.
-The user's existing dark/light toggle keeps working through your theme.
+- All keys are **partial** — every individual key is optional within
+  its group. Missing keys inherit from `DEFAULT_DARK_COLOR_PALETTE`
+  or `DEFAULT_LIGHT_COLOR_PALETTE`.
+- `id` must be slug-cased (lowercase, alphanumeric + hyphens, must
+  start with letter or digit).
+- `light_theme: true` removes the `.dark-theme` class on
+  `document.body` while this palette is active.
+- Hex values are 6-digit (`#rrggbb`); 3-digit shortforms are not
+  accepted.
 
-So: dark theme → override `charcoal-*`. Light theme → override
-`smoke-*`. Both → override both. Accents and app-mode tokens are
-mode-independent.
+## Mapping strategy — extracted colours to palette keys
+
+Sort the extracted colors from `extract_palette_from_image` by
+perceived lightness (eyeball — darker hex first). Then assign:
+
+### `comfy_base` (always populate)
+
+For a **dark theme**:
+
+| Key | Take from |
+|---|---|
+| `bg-color` | Darkest extracted color (or near-darkest) |
+| `comfy-menu-bg` | Slightly darker than bg-color (drop ~5-10% lightness) |
+| `comfy-menu-secondary-bg` | Between bg-color and content-bg |
+| `comfy-input-bg` | Even darker than comfy-menu-bg (input wells should sink) |
+| `content-bg` | Mid-dark — between bg-color and a lighter chrome surface |
+| `content-hover-bg` | One step lighter than content-bg |
+| `tr-even-bg-color`, `tr-odd-bg-color` | Two adjacent lightnesses near content-bg |
+| `fg-color` | Lightest extracted color (high-contrast text) |
+| `content-fg`, `content-hover-fg` | Same as fg-color (or near it) |
+| `input-text` | Slightly less bright than fg-color |
+| `descrip-text` | Mid-mute — secondary text |
+| `drag-text` | Same family as descrip-text |
+| `error-text` | Saturated red (often `#ff4444`) — keep close to default unless user wants to retheme errors |
+| `border-color` | Mid-tone neutral, theme-tinted |
+| `bar-shadow` | Default `rgba(16,16,16,0.5) 0 0 0.5rem` is fine |
+
+For a **light theme**, mirror the lightness ordering: `bg-color` is
+the lightest, `fg-color` the darkest.
+
+### `litegraph_base` (override 3-5 for cohesion)
+
+| Key | Take from |
+|---|---|
+| `NODE_DEFAULT_BGCOLOR` | A theme-tinted variant of `bg-color`, slightly different so nodes stand out from canvas |
+| `NODE_TITLE_COLOR` | Match `descrip-text` or one notch brighter |
+| `WIDGET_BGCOLOR` | Same as `comfy-input-bg` for visual unity |
+| `LINK_COLOR` | A muted accent — desaturate one of your extracted accents |
+| `CLEAR_BACKGROUND_COLOR` | Match `bg-color` so empty canvas matches chrome |
+
+Skip `BACKGROUND_IMAGE` (base64 PNG, leave default) and
+`NODE_DEFAULT_SHAPE` (enum, leave default).
+
+### `node_slot` (usually skip)
+
+These colours encode connection-type semantics (CLIP=yellow,
+MODEL=purple, LATENT=pink, IMAGE=blue, etc.). Users learn them.
+**Leave empty** unless the user explicitly says to retheme connection
+colours.
 
 ## Design heuristics
 
-- **Contrast first.** Background-to-foreground luminance ratio should
-  exceed 7:1 for body text on neutrals.
-- **One accent.** Don't introduce two competing high-saturation hues.
-- **Run = green, Stop = red.** Override to other hues only if the user
-  explicitly asks; warn that it weakens the safety affordance.
+- **Contrast first.** Body-text ratio against `bg-color` should
+  exceed 7:1.
+- **Monotonic neutrals.** The bg surfaces (`bg-color`, `comfy-menu-bg`,
+  `comfy-input-bg`, `content-bg`) should step in lightness — no two
+  adjacent surfaces at identical brightness.
+- **Reserve saturated colors for accents.** Don't make `bg-color`
+  vibrant; the canvas is the focus.
+- **One identity colour.** Don't introduce two competing
+  high-saturation hues.
 
-## Minimum viable override set
+## Worked example — preferred workflow
 
-12–20 overrides is enough:
+**User:** *"make me a campfire theme"*
 
-- All 8 steps of the mode-appropriate neutral ramp (`charcoal-*` for
-  dark, `smoke-*` for light).
-- One accent ramp, all steps.
-- All 6 `app-mode-go-*` / `app-mode-stop-*` tokens.
+Plan:
+- Mood: warm dark, ember oranges, deep plum-brown neutrals.
+- light_theme: false.
 
-## Failure modes
+Tool calls (abbreviated):
 
-- Don't include `--` in token names.
-- Don't pass `var(--…)` references as values.
-- Don't override every token in the inventory.
-- If `list_comfyui_tokens` returns a token you don't recognize, leave
-  it alone — the design system already wires it correctly.
+```
+list_comfyui_tokens(group="all")
+  → schema reference
+
+generate_mood_image(prompt="a quiet campfire in autumn forest at dusk,
+                            warm orange glow on burnt logs, soft amber
+                            light through leaves, deep ember reds,
+                            atmospheric fog")
+  → ~/.cache/.../<prompt_id>.png
+
+extract_palette_from_image(path=…, n_colors=8)
+  → [{hex:"#181b1e", ...}, {hex:"#bf7c49", ...}, ...]
+
+write_comfyui_theme(palette={
+  "id": "campfire-mood",
+  "name": "Campfire Mood",
+  "light_theme": false,
+  "colors": {
+    "node_slot": {},
+    "litegraph_base": {
+      "NODE_DEFAULT_BGCOLOR": "#2b1e16",
+      "NODE_TITLE_COLOR": "#bf7c49",
+      "WIDGET_BGCOLOR": "#1e1510",
+      "LINK_COLOR": "#793d26",
+      "CLEAR_BACKGROUND_COLOR": "#15100c"
+    },
+    "comfy_base": {
+      "bg-color": "#15100c",
+      "fg-color": "#f5e6d2",
+      "comfy-menu-bg": "#0f0a08",
+      "comfy-menu-secondary-bg": "#1e1510",
+      "comfy-input-bg": "#0a0606",
+      "input-text": "#e6cfb6",
+      "descrip-text": "#a08070",
+      "drag-text": "#c9b8a4",
+      "error-text": "#ff5050",
+      "border-color": "#3a2820",
+      "tr-even-bg-color": "#1e1510",
+      "tr-odd-bg-color": "#2b1e16",
+      "content-bg": "#2b1e16",
+      "content-fg": "#f5e6d2",
+      "content-hover-bg": "#3a2820",
+      "content-hover-fg": "#f5e6d2",
+      "bar-shadow": "rgba(16, 10, 8, 0.5) 0 0 0.5rem"
+    }
+  }
+})
+
+apply_comfyui_theme(name="campfire-mood")
+
+render_theme_swatch(name="campfire-mood")
+```
+
+Then summarize:
+
+> Generated a campfire reference (autumn forest, ember light) and
+> mapped its palette onto a dark theme. Burnt-wood neutrals from the
+> forest tones, ember-amber accents on titles and content surfaces.
+> Registered as a custom palette — should appear in Settings →
+> Appearance → Color Palette as "Campfire Mood". Reload the page to
+> see the menu update. Say "warmer", "more contrast", or "more
+> saturation" to iterate.

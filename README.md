@@ -10,29 +10,32 @@ Built for the Hermes Agent Creative Hackathon. Still rough around the edges.
 
 ## What it does
 
-A skill (`comfyui-theme-maker`) that loads the canonical ComfyUI token
-taxonomy plus design heuristics into Hermes' context, and seven tools
-the agent calls in an agentic loop:
+A skill (`comfyui-theme-maker`) that loads the canonical ComfyUI
+palette schema and design heuristics into Hermes' context, plus seven
+tools the agent calls in an agentic loop:
 
-- `list_comfyui_tokens` — return every overridable CSS custom property.
+- `list_comfyui_tokens` — return the canonical schema keys per group
+  (`node_slot`, `litegraph_base`, `comfy_base`).
 - `generate_mood_image` — generate a reference image via your local
   ComfyUI text-to-image stack to anchor palette decisions in real
   pixels rather than guessed colors.
 - `extract_palette_from_image` — median-cut quantization on the
   reference image; returns dominant hex colors with weights.
-- `write_comfyui_theme` — write a theme file to your ComfyUI_frontend
-  checkout.
-- `apply_comfyui_theme` — activate the theme via a single `@import`,
-  picked up by Vite HMR.
+- `write_comfyui_theme` — save a palette JSON in canonical schema to
+  the local cache.
+- `apply_comfyui_theme` — register the palette via ComfyUI's settings
+  HTTP API (`Comfy.CustomColorPalettes`) and set it active. Theme
+  appears in Settings → Appearance → Color Palette.
 - `render_theme_swatch` — ANSI-colored TUI preview of a theme, grouped
-  by category. Called automatically after every apply.
+  by schema group. Called automatically after every apply.
 - `render_theme_image` — 1080×1080 PNG infographic of a theme. On
   request only (e.g. for sharing).
 
-The plugin targets ComfyUI_frontend's three-layer token surface:
-**palette** (foundational color ramps), **semantic** (cascades
-automatically), and the new **app-mode** tokens introduced by PR
-[#11317](https://github.com/Comfy-Org/ComfyUI_frontend/pull/11317).
+**Output format is the canonical ComfyUI palette JSON** — the same
+shape used by built-in palettes (`src/assets/palettes/*.json`) and
+every community theme repo (shahshrey, sizzlebop, gmorks, civitai,
+…). Generated themes are drop-in compatible with the existing
+ecosystem.
 
 ## Stack
 
@@ -122,17 +125,16 @@ shell `pip` installs into the wrong Python:
 The plugin imports these lazily, so it loads regardless — only the two
 tools that need them error until installed.
 
-### 5. Tell the agent where your ComfyUI_frontend lives
+### 5. Make sure ComfyUI is running
 
-The agent asks on its first theme request and saves the answer to
-memory; you only get asked once per machine.
+The plugin talks to ComfyUI's HTTP API (default
+`http://127.0.0.1:8188`) for both image generation and registering
+themes. Override with `HERMES_COMFYUI_API_URL=...` if your install
+listens elsewhere.
 
-### 6. Start ComfyUI_frontend
-
-```bash
-cd /path/to/ComfyUI_frontend
-pnpm dev
-```
+The plugin no longer needs a `ComfyUI_frontend` checkout — themes
+register via the settings API and appear in the standard theme menu
+just like any imported community palette.
 
 ## Usage
 
@@ -143,30 +145,26 @@ hermes
 In the chat:
 
 ```
-> Make me a warm campfire theme for ComfyUI's frontend.
+> Make me a warm campfire theme.
 ```
 
-The agent grounds itself, calls `generate_mood_image` (~15-25 s of
-ComfyUI work), extracts a palette, maps it onto ramps, writes and
-applies the theme, then renders the ANSI swatch. Vite HMR live-reloads
-the browser. Iterate by saying "warmer", "less saturated", etc. — the
-agent rewrites and re-applies without regenerating the reference.
+The agent calls `generate_mood_image` (~15-25 s of ComfyUI work),
+extracts a palette, maps it onto the canonical schema, writes a
+palette JSON, registers it via ComfyUI's settings API, and renders
+the ANSI swatch. The theme appears in Settings → Appearance → Color
+Palette and is active. Iterate by saying "warmer", "less saturated"
+— the agent rewrites and re-registers without regenerating the
+reference image.
 
-If ComfyUI is unreachable or the workflow fails, the agent falls back
-to text-only theme generation.
-
-`apply_comfyui_theme` modifies your tracked
-`src/assets/css/style.css`. To revert: `git restore src/assets/css/style.css`.
+If ComfyUI is unreachable, the agent falls back to text-only theme
+generation.
 
 ## Examples
 
-[`examples/campfire.css`](./examples/campfire.css) is a hand-designed
-warm-dark reference theme. Drop it directly into your themes dir to
-preview without running the agent:
-
-```bash
-cp examples/campfire.css "$HERMES_COMFYUI_FRONTEND_PATH/src/assets/css/themes/"
-```
+[`examples/campfire.json`](./examples/campfire.json) is a
+hand-designed warm-dark reference theme in the canonical schema.
+Import it via Settings → Appearance → Color Palette → Import, or
+copy into ComfyUI's user settings dir to preload it.
 
 ## Tested against
 
@@ -177,8 +175,9 @@ cp examples/campfire.css "$HERMES_COMFYUI_FRONTEND_PATH/src/assets/css/themes/"
   `qwen_3_06b_base.safetensors`, `qwen_image_vae.safetensors`,
   `anima-turbo-lora-v0.1.safetensors`). Other installs (Flux, SDXL,
   etc.) would need the workflow swapped — future work.
-- **ComfyUI_frontend**: `main` and PR #11317 branch
-  `app-mode-semi-customizable-layout` in graph, app, and builder mode.
+- **Output format**: canonical ComfyUI palette JSON, drop-in
+  compatible with built-in palettes and community theme repos.
+- **Settings API**: ComfyUI single-user mode (default).
 
 ## Development
 

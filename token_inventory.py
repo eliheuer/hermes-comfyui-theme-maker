@@ -1,116 +1,142 @@
-"""Canonical inventory of ComfyUI_frontend CSS tokens the theme maker overrides.
+"""Canonical ComfyUI palette schema reference.
 
-Sourced from:
-  packages/design-system/src/css/_palette.css       (palette layer)
-  packages/design-system/src/css/style.css          (extended palette + layout)
-  src/assets/css/style.css                          (app-mode layer, PR #11317)
+Mirrors the Zod schema at src/schemas/colorPaletteSchema.ts in
+ComfyUI_frontend. Three groups:
+
+- node_slot   (16 keys, all required) — colors for canvas connection
+              types (CLIP, MODEL, IMAGE, ...). Semantically meaningful;
+              users read connection type at a glance from color.
+- litegraph_base (25 keys, all required in the schema but our generator
+              treats most as optional) — canvas-internal node rendering
+              (titles, widgets, links, slots).
+- comfy_base  (18 required + 9 optional) — UI chrome around the canvas
+              (panels, menus, inputs, borders, table rows).
+
+A palette JSON looks like:
+
+    {
+      "id": "campfire-mood",
+      "name": "Campfire Mood",
+      "light_theme": false,
+      "colors": {
+        "node_slot": { ... },
+        "litegraph_base": { ... },
+        "comfy_base": { ... }
+      }
+    }
+
+Each group's individual keys are optional in `partialColorsSchema` —
+the loader merges with DEFAULT_DARK_COLOR_PALETTE or
+DEFAULT_LIGHT_COLOR_PALETTE to fill missing keys. Our generator
+typically only overrides comfy_base + a few litegraph_base keys; node
+slots stay at defaults so the CLIP/MODEL/etc. colors remain
+recognizable.
 """
 
-# Layer 1: foundational palette ramps from _palette.css.
-PALETTE = [
-    ("color-charcoal-100", "#55565e", "lightest charcoal"),
-    ("color-charcoal-200", "#494a50", ""),
-    ("color-charcoal-300", "#3c3d42", ""),
-    ("color-charcoal-400", "#313235", ""),
-    ("color-charcoal-500", "#2d2e32", ""),
-    ("color-charcoal-600", "#262729", "primary node surface (dark)"),
-    ("color-charcoal-700", "#202121", "tooltip / accent-primary (light)"),
-    ("color-charcoal-800", "#171718", "primary background (dark)"),
-    ("color-neutral-550", "#636363", ""),
-    ("color-ash-300", "#bbbbbb", ""),
-    ("color-ash-500", "#828282", "secondary text"),
-    ("color-ash-800", "#444444", ""),
-    ("color-smoke-100", "#f3f3f3", ""),
-    ("color-smoke-200", "#e9e9e9", "button hover surface (light)"),
-    ("color-smoke-300", "#e1e1e1", ""),
-    ("color-smoke-400", "#d9d9d9", "button active surface (light)"),
-    ("color-smoke-500", "#c5c5c5", ""),
-    ("color-smoke-600", "#b4b4b4", ""),
-    ("color-smoke-700", "#a0a0a0", ""),
-    ("color-smoke-800", "#8a8a8a", ""),
-    ("color-white", "#ffffff", "base background (light)"),
-    ("color-black", "#000000", ""),
-    ("color-electric-400", "#f0ff41", "brand yellow"),
-    ("color-sapphire-700", "#172dd7", "brand blue"),
+# 16 connection-type colors. Defaults convey type semantics — users
+# learn that CLIP is yellow, MODEL is purple, etc. — so most generated
+# themes leave node_slot empty and inherit defaults.
+NODE_SLOT_KEYS = [
+    "CLIP", "CLIP_VISION", "CLIP_VISION_OUTPUT",
+    "CONDITIONING", "CONTROL_NET",
+    "IMAGE", "LATENT", "MASK", "MODEL", "STYLE_MODEL", "VAE",
+    "NOISE", "GUIDER", "SAMPLER", "SIGMAS", "TAESD",
 ]
 
-# Layer 2: extended palette declared in design-system style.css @theme block.
-EXTENDED_PALETTE = [
-    ("color-ivory-100", "#fdfbfa", ""),
-    ("color-ivory-200", "#faf9f5", ""),
-    ("color-ivory-300", "#f0eee6", ""),
-    ("color-sand-100", "#e1ded5", ""),
-    ("color-sand-200", "#fff7d5", ""),
-    ("color-sand-300", "#888682", ""),
-    ("color-sand-400", "#eed7ac", ""),
-    ("color-slate-100", "#9c9eab", ""),
-    ("color-slate-200", "#9fa2bd", ""),
-    ("color-slate-300", "#5b5e7d", ""),
-    ("color-azure-300", "#78bae9", ""),
-    ("color-azure-400", "#31b9f4", "primary background (light)"),
-    ("color-azure-600", "#0b8ce9", "primary background (dark)"),
-    ("color-cobalt-800", "#185a8b", "primary hover (light)"),
-    ("color-jade-400", "#47e469", ""),
-    ("color-jade-600", "#00cd72", "success background"),
-    ("color-graphite-400", "#9c9eab", ""),
-    ("color-gold-400", "#fcbf64", "warning background (light)"),
-    ("color-gold-500", "#fdab34", "warning hover"),
-    ("color-gold-600", "#fd9903", "warning background (dark)"),
-    ("color-coral-500", "#f75951", "destructive background (light)"),
-    ("color-coral-600", "#e04e48", "destructive hover"),
-    ("color-coral-700", "#b33a3a", "destructive background (dark)"),
-    ("color-magenta-300", "#ceaac9", ""),
-    ("color-magenta-700", "#6a246a", "bypass color"),
-    ("color-ocean-300", "#badde8", "builder mode background (light)"),
-    ("color-ocean-600", "#2f687a", "builder mode button background"),
-    ("color-ocean-900", "#253236", "builder mode background (dark)"),
-    ("color-danger-100", "#c02323", ""),
-    ("color-danger-200", "#d62952", ""),
-    ("color-bypass", "#6a246a", ""),
-    ("color-error", "#962a2a", "error stroke / text"),
+# 25 canvas-rendering keys. Set as JS properties on app.canvas plus
+# some CSS variables for the Vue node renderer. NODE_DEFAULT_SHAPE is
+# an enum (BOX_SHAPE / ROUND_SHAPE / CARD_SHAPE), BACKGROUND_IMAGE is
+# a base64 PNG (the canvas grid) — both stored in this group but not
+# colors. Generators typically override only NODE_DEFAULT_BGCOLOR,
+# NODE_TITLE_COLOR, WIDGET_BGCOLOR, LINK_COLOR, and CLEAR_BACKGROUND_COLOR.
+LITEGRAPH_BASE_KEYS = [
+    "BACKGROUND_IMAGE",
+    "CLEAR_BACKGROUND_COLOR",
+    "NODE_TITLE_COLOR",
+    "NODE_SELECTED_TITLE_COLOR",
+    "NODE_TEXT_COLOR",
+    "NODE_TEXT_HIGHLIGHT_COLOR",
+    "NODE_DEFAULT_COLOR",
+    "NODE_DEFAULT_BGCOLOR",
+    "NODE_DEFAULT_BOXCOLOR",
+    "NODE_DEFAULT_SHAPE",
+    "NODE_BOX_OUTLINE_COLOR",
+    "NODE_BYPASS_BGCOLOR",
+    "NODE_ERROR_COLOUR",
+    "DEFAULT_SHADOW_COLOR",
+    "WIDGET_BGCOLOR",
+    "WIDGET_OUTLINE_COLOR",
+    "WIDGET_TEXT_COLOR",
+    "WIDGET_SECONDARY_TEXT_COLOR",
+    "WIDGET_DISABLED_TEXT_COLOR",
+    "LINK_COLOR",
+    "EVENT_LINK_COLOR",
+    "CONNECTING_LINK_COLOR",
+    "BADGE_FG_COLOR",
+    "BADGE_BG_COLOR",
 ]
 
-# Layer 3: app-mode tokens added by PR #11317 (app-mode-semi-customizable-layout).
-# Hard-coded hex in src/assets/css/style.css :root, pending theme-system redesign.
-APP_MODE = [
-    ("app-mode-go-bg", "#279252", "Run button background"),
-    ("app-mode-go-bg-hover", "#35a361", "Run button hover"),
-    ("app-mode-go-border", "#2c7c49", "Run button border"),
-    ("app-mode-stop-bg", "#ef4444", "Stop button background"),
-    ("app-mode-stop-bg-hover", "#f87171", "Stop button hover"),
-    ("app-mode-stop-border", "#b91c1c", "Stop button border"),
+# 18 required UI-chrome keys. Applied as CSS custom properties on
+# :root via rootStyle.setProperty('--' + key, value) in
+# colorPaletteService.loadComfyColorPalette.
+COMFY_BASE_REQUIRED_KEYS = [
+    "fg-color",
+    "bg-color",
+    "comfy-menu-bg",
+    "comfy-menu-secondary-bg",
+    "comfy-input-bg",
+    "input-text",
+    "descrip-text",
+    "drag-text",
+    "error-text",
+    "border-color",
+    "tr-even-bg-color",
+    "tr-odd-bg-color",
+    "content-bg",
+    "content-fg",
+    "content-hover-bg",
+    "content-hover-fg",
+    "bar-shadow",
 ]
 
-# Layer 4: layout color tokens in design-system style.css @theme block.
-# These reference primevue --p-* tokens; usually safe at default.
-LAYOUT = [
-    ("color-layout-canvas", "var(--p-content-background)", "App-mode workspace background"),
-    ("color-layout-cell", "var(--p-surface-800)", "Floating panel surface"),
-    ("color-layout-cell-hover", "var(--p-surface-700)", "Cell hover"),
-    ("color-layout-text", "var(--p-text-color)", "Primary text in app mode"),
-    ("color-layout-mute", "var(--p-text-muted-color)", "Muted text in app mode"),
+# 9 optional UI-chrome keys. Loader falls back to var(--palette-${key})
+# design-system defaults when a palette omits them.
+COMFY_BASE_OPTIONAL_KEYS = [
+    "bg-img",
+    "contrast-mix-color",
+    "interface-stroke",
+    "interface-panel-surface",
+    "interface-panel-box-shadow",
+    "interface-panel-drop-shadow",
+    "interface-panel-hover-surface",
+    "interface-panel-selected-surface",
+    "interface-button-hover-surface",
 ]
 
-
-_LAYERS = {
-    "palette": PALETTE,
-    "extended_palette": EXTENDED_PALETTE,
-    "app_mode": APP_MODE,
-    "layout": LAYOUT,
-}
+COMFY_BASE_KEYS = COMFY_BASE_REQUIRED_KEYS + COMFY_BASE_OPTIONAL_KEYS
 
 
-def all_tokens():
-    out = []
-    for layer_name, rows in _LAYERS.items():
-        for name, default, desc in rows:
-            out.append((name, default, desc, layer_name))
-    return out
+def all_groups():
+    return {
+        "node_slot": NODE_SLOT_KEYS,
+        "litegraph_base": LITEGRAPH_BASE_KEYS,
+        "comfy_base": COMFY_BASE_KEYS,
+    }
 
 
-def by_layer(layer: str):
-    return list(_LAYERS[layer])
+def all_keys():
+    return {
+        *NODE_SLOT_KEYS,
+        *LITEGRAPH_BASE_KEYS,
+        *COMFY_BASE_KEYS,
+    }
 
 
-def names():
-    return {name for name, _, _, _ in all_tokens()}
+def group_of(key):
+    if key in NODE_SLOT_KEYS:
+        return "node_slot"
+    if key in LITEGRAPH_BASE_KEYS:
+        return "litegraph_base"
+    if key in COMFY_BASE_KEYS:
+        return "comfy_base"
+    return None

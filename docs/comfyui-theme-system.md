@@ -47,7 +47,7 @@ groups, each mapping to a different rendering surface.
   colors: {
     node_slot:      Partial<NodeSlotColors>,      // 16 keys
     litegraph_base: Partial<LiteGraphBaseColors>, // 25 keys
-    comfy_base:     Partial<ComfyBaseColors>,     // 18 required + 9 optional
+    comfy_base:     Partial<ComfyBaseColors>,     // 17 required + 9 optional
   },
   light_theme?: boolean,
   // .passthrough() — extra fields like `version`, `description`, `imageUrl`
@@ -96,7 +96,7 @@ BADGE_FG_COLOR, BADGE_BG_COLOR
 color but stored in this group. `NODE_DEFAULT_SHAPE` is an enum
 (`BOX_SHAPE`/`ROUND_SHAPE`/`CARD_SHAPE`) — also not a color.
 
-### The 18 required + 9 optional `comfy_base` keys (UI chrome)
+### The 17 required + 9 optional `comfy_base` keys (UI chrome)
 
 Applied as plain CSS custom properties on `:root` via
 `rootStyle.setProperty('--' + key, value)`

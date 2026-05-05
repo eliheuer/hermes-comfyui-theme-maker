@@ -1,89 +1,77 @@
 """JSON schemas describing the theme-maker tools to the LLM."""
 
-LIST_TOKENS = {
+LIST_COMFYUI_TOKENS = {
     "name": "list_comfyui_tokens",
     "description": (
-        "Return the canonical list of ComfyUI frontend CSS tokens this skill "
-        "can override. Call this once at the start of any theming task to "
-        "ground decisions in the actual token surface; do not invent token "
-        "names that are not in the response."
+        "Return the canonical ComfyUI palette schema keys, grouped by "
+        "(node_slot, litegraph_base, comfy_base). Call this once at the "
+        "start of any theming task to see what keys you can populate. "
+        "The schema mirrors the official ComfyUI_frontend Zod schema "
+        "(src/schemas/colorPaletteSchema.ts); generated themes are "
+        "drop-in compatible with community palettes and the built-in "
+        "theme menu."
     ),
     "parameters": {
         "type": "object",
         "properties": {
-            "layer": {
+            "group": {
                 "type": "string",
-                "enum": [
-                    "all",
-                    "palette",
-                    "extended_palette",
-                    "app_mode",
-                    "layout",
-                ],
-                "description": (
-                    "Which token layer to return. 'all' (default) is usually "
-                    "the right choice for cohesive theming."
-                ),
+                "enum": ["all", "node_slot", "litegraph_base", "comfy_base"],
                 "default": "all",
+                "description": (
+                    "Which group's keys to return. 'all' returns the "
+                    "full schema reference."
+                ),
             },
         },
     },
 }
 
-WRITE_THEME = {
+WRITE_COMFYUI_THEME = {
     "name": "write_comfyui_theme",
     "description": (
-        "Write a CSS theme file to the user's ComfyUI_frontend checkout. "
-        "Pass overrides as a flat token-name to value dict. Token names must "
-        "come from list_comfyui_tokens; unknown tokens are rejected. The "
-        "leading '--' is omitted from token names. The frontend_path "
-        "argument is required — ask the user for their ComfyUI_frontend "
-        "checkout location and pass it explicitly; the tool does NOT "
-        "auto-detect."
+        "Save a palette JSON to the local cache. The palette must match "
+        "the canonical ComfyUI schema: { id, name, light_theme?, "
+        "colors: { node_slot: {...}, litegraph_base: {...}, comfy_base: "
+        "{...} } }. Each colors group is a partial dict — only include "
+        "keys you want to override; missing keys inherit from the "
+        "matching default palette (DEFAULT_DARK or DEFAULT_LIGHT). "
+        "Most generated themes only override comfy_base + a handful of "
+        "litegraph_base keys; node_slot is usually left empty so "
+        "connection-type colors stay recognizable. Call "
+        "list_comfyui_tokens first to see valid keys per group."
     ),
     "parameters": {
         "type": "object",
         "properties": {
-            "name": {
-                "type": "string",
-                "description": (
-                    "Theme slug (lowercase, hyphenated, alphanumeric). "
-                    "Used as the .css filename."
-                ),
-            },
-            "overrides": {
+            "palette": {
                 "type": "object",
                 "description": (
-                    "Token-name to CSS-value pairs (e.g. "
-                    '{"color-charcoal-800": "#0a0a14"}). Names omit the '
-                    "leading '--'. Values must be concrete (hex, rgb, rgba) "
-                    "rather than var() references."
+                    "The full palette object. Required fields: id "
+                    "(slug-cased string, alphanumeric + hyphens), name "
+                    "(human-readable), colors (object with node_slot, "
+                    "litegraph_base, comfy_base sub-objects, each "
+                    "containing only the keys you wish to override). "
+                    "Optional: light_theme (boolean — set true to "
+                    "remove .dark-theme class while this palette is "
+                    "active)."
                 ),
-                "additionalProperties": {"type": "string"},
-            },
-            "frontend_path": {
-                "type": "string",
-                "description": (
-                    "Absolute path (or '~/...' shorthand) to the user's "
-                    "ComfyUI_frontend checkout root. The directory must "
-                    "contain src/assets/css/style.css. Ask the user for "
-                    "this once per session and remember it via the memory "
-                    "tool for future sessions."
-                ),
+                "required": ["id", "name", "colors"],
             },
         },
-        "required": ["name", "overrides", "frontend_path"],
+        "required": ["palette"],
     },
 }
 
-APPLY_THEME = {
+APPLY_COMFYUI_THEME = {
     "name": "apply_comfyui_theme",
     "description": (
-        "Activate a previously-written theme by injecting an @import into the "
-        "frontend's main style.css between sentinel comments. Idempotent: "
-        "only one theme is active at a time. If a Vite dev server is running "
-        "the change hot-reloads. The frontend_path argument must match the "
-        "one passed to write_comfyui_theme."
+        "Register a previously-written theme as a ComfyUI custom "
+        "palette and set it as active, via ComfyUI's settings HTTP "
+        "API. The theme appears in Settings → Appearance → Color "
+        "Palette and applies on the next page load. Idempotent. "
+        "Requires ComfyUI running locally (default 127.0.0.1:8188; "
+        "override with HERMES_COMFYUI_API_URL env var)."
     ),
     "parameters": {
         "type": "object",
@@ -91,30 +79,21 @@ APPLY_THEME = {
             "name": {
                 "type": "string",
                 "description": (
-                    "Theme slug previously passed to write_comfyui_theme."
-                ),
-            },
-            "frontend_path": {
-                "type": "string",
-                "description": (
-                    "Same ComfyUI_frontend checkout path used in "
-                    "write_comfyui_theme."
+                    "Theme id previously passed to write_comfyui_theme."
                 ),
             },
         },
-        "required": ["name", "frontend_path"],
+        "required": ["name"],
     },
 }
 
 GENERATE_MOOD_IMAGE = {
     "name": "generate_mood_image",
     "description": (
-        "Generate a small reference image via the local ComfyUI Anima/Qwen "
-        "text-to-image stack. Use this when designing a theme to anchor the "
-        "palette in real generated pixels rather than guessing colors from a "
-        "description. Returns a path to the generated PNG. Falls back "
-        "gracefully if ComfyUI is unreachable; in that case the caller "
-        "should skip to text-only theme generation."
+        "Generate a small reference image via the local ComfyUI "
+        "Anima/Qwen text-to-image stack. Use to anchor palette "
+        "decisions in real generated pixels. Returns the cached PNG "
+        "path."
     ),
     "parameters": {
         "type": "object",
@@ -122,138 +101,79 @@ GENERATE_MOOD_IMAGE = {
             "prompt": {
                 "type": "string",
                 "description": (
-                    "Anime-styled positive prompt for the Anima model. The "
-                    "stack is anime / non-photorealistic; describe the mood "
-                    "and atmosphere directly. Example: 'a campfire in autumn "
-                    "forest at dusk, glowing embers, warm orange light, "
-                    "fallen leaves'. Quality boilerplate ('masterpiece, best "
-                    "quality, ...') is added automatically."
+                    "Anime-styled positive prompt. Quality boilerplate "
+                    "is added automatically — describe mood + colour "
+                    "directly."
                 ),
             },
             "size": {
                 "type": "integer",
-                "description": (
-                    "Square image size in pixels. Default 768; smaller is "
-                    "faster, larger is more detail. Capped at 1024."
-                ),
                 "default": 768,
+                "description": "Square pixel size, 256-1024.",
             },
             "seed": {
                 "type": "integer",
-                "description": (
-                    "Generation seed. Omit for random. Pass a fixed seed to "
-                    "reproduce a specific image across runs."
-                ),
+                "description": "Optional fixed seed; random if omitted.",
             },
         },
         "required": ["prompt"],
     },
 }
 
-RENDER_THEME_IMAGE = {
-    "name": "render_theme_image",
+EXTRACT_PALETTE_FROM_IMAGE = {
+    "name": "extract_palette_from_image",
     "description": (
-        "Render a previously-written theme as a 1080x1080 PNG infographic "
-        "suitable for social-media sharing or design review. Shows the "
-        "theme name, a charcoal-ramp visual stripe, and every token "
-        "grouped into labeled sections. Call this only when the user "
-        "explicitly asks for an image / shareable output / social-media "
-        "version — not as part of the default theme-generation loop. "
-        "Returns the saved image's path."
+        "Extract the N most dominant colors from an image via "
+        "median-cut quantization. Use after generate_mood_image to "
+        "convert pixels into hex anchors. Returns "
+        "[{hex, percent}, ...] sorted by pixel count descending."
     ),
     "parameters": {
         "type": "object",
         "properties": {
-            "name": {
-                "type": "string",
-                "description": (
-                    "Theme slug previously passed to write_comfyui_theme."
-                ),
-            },
-            "frontend_path": {
-                "type": "string",
-                "description": (
-                    "Same ComfyUI_frontend checkout path used in "
-                    "write_comfyui_theme."
-                ),
-            },
-            "output_path": {
-                "type": "string",
-                "description": (
-                    "Optional absolute path (or '~/...' shorthand) for the "
-                    "saved PNG. Default: "
-                    "~/.cache/hermes-comfyui-theme-maker/<name>.png. Pass "
-                    "an explicit path if the user wants the image somewhere "
-                    "specific."
-                ),
-            },
+            "path": {"type": "string"},
+            "n_colors": {"type": "integer", "default": 8},
         },
-        "required": ["name", "frontend_path"],
+        "required": ["path"],
     },
 }
 
 RENDER_THEME_SWATCH = {
     "name": "render_theme_swatch",
     "description": (
-        "Render a previously-written theme as ANSI-colored swatches for "
-        "terminal display. Returns a multi-line string showing each token "
-        "as a colored block grouped by category (charcoal / smoke / "
-        "accents / app-mode / layout). Call this after apply_comfyui_theme "
-        "and include the returned 'swatch' field verbatim in your reply "
-        "so the user gets immediate visual feedback. Also useful for "
-        "debugging an existing theme."
+        "Render a previously-written theme as ANSI-colored swatches "
+        "for terminal display, grouped by schema group. Include the "
+        "returned 'swatch' string verbatim in your reply so the "
+        "user sees the colors in their terminal."
     ),
     "parameters": {
         "type": "object",
         "properties": {
-            "name": {
-                "type": "string",
-                "description": (
-                    "Theme slug previously passed to write_comfyui_theme."
-                ),
-            },
-            "frontend_path": {
-                "type": "string",
-                "description": (
-                    "Same ComfyUI_frontend checkout path used in "
-                    "write_comfyui_theme."
-                ),
-            },
+            "name": {"type": "string"},
         },
-        "required": ["name", "frontend_path"],
+        "required": ["name"],
     },
 }
 
-EXTRACT_PALETTE_FROM_IMAGE = {
-    "name": "extract_palette_from_image",
+RENDER_THEME_IMAGE = {
+    "name": "render_theme_image",
     "description": (
-        "Extract the N most dominant colors from an image via median-cut "
-        "quantization. Use after generate_mood_image to convert the visual "
-        "into concrete palette anchors that can be mapped onto ComfyUI's "
-        "token ramps (dark anchors -> charcoal-*, warm anchors -> coral-* "
-        "or gold-*, etc.). Returns a list of {hex, percent} sorted by "
-        "pixel count descending."
+        "Render a 1080×1080 PNG infographic of a theme. Call only on "
+        "explicit user request (e.g. 'make a shareable image' or "
+        "'social-media version'). Returns the saved file path."
     ),
     "parameters": {
         "type": "object",
         "properties": {
-            "path": {
+            "name": {"type": "string"},
+            "output_path": {
                 "type": "string",
                 "description": (
-                    "Absolute path to a PNG/JPG/WEBP image, or '~/...' "
-                    "shorthand. Typically the path returned by "
-                    "generate_mood_image."
+                    "Optional. Default: "
+                    "~/.cache/hermes-comfyui-theme-maker/<name>.png"
                 ),
-            },
-            "n_colors": {
-                "type": "integer",
-                "description": (
-                    "Number of dominant colors to return. Default 8. "
-                    "More than ~12 starts producing near-duplicates."
-                ),
-                "default": 8,
             },
         },
-        "required": ["path"],
+        "required": ["name"],
     },
 }
