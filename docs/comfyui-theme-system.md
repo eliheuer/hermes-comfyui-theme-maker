@@ -216,6 +216,183 @@ active one shows a checkmark. Clicking calls
 truth is the store — not stylesheets, not files on disk. Anything
 that wants to be in the picker must land in the store.**
 
+## Bootstrap timeline (corrected and verified)
+
+The actual sequence at app startup, traced from `main.ts` to
+first-paint with the active palette applied:
+
+1. **`main.ts`** — `useBootstrapStore().startStoreBootstrap()` fires
+   *before* `app.mount('#vue-app')`. PrimeVue is installed with
+   `darkModeSelector: '.dark-theme, :root:has(.dark-theme)'`
+   (workaround for [primevue/primevue#5515](https://github.com/primefaces/primevue/issues/5515)).
+2. **`bootstrapStore.loadAuthenticatedStores()`** — calls
+   `settingStore.load()`, which `await`s `api.getSettings()` and
+   populates `settingStore.settingValues`. Both `Comfy.ColorPalette`
+   (string) and `Comfy.CustomColorPalettes` (record) are now in
+   memory.
+3. **`app.mount('#vue-app')`** — Vue components start mounting.
+4. **`GraphView.vue:137-154`** — `watch(() =>
+   colorPaletteStore.completedActivePalette, ..., { immediate: true })`
+   fires. Toggles `.dark-theme` class on `document.body`. Reports
+   the chosen text color to the Electron host (desktop only).
+   - **At this moment, `customPalettes` is still `{}`.** If the
+     user's saved active id refers to a custom palette, it will
+     not yet resolve in `palettesLookup` — so the watcher reads
+     the default palette and may toggle the wrong `.dark-theme`
+     state briefly.
+5. **`GraphCanvas.vue:566-568`** — inside `onMounted`,
+   `colorPaletteStore.customPalettes = settingStore.get('Comfy.CustomColorPalettes')`
+   hydrates the store from settings.
+6. **`palettesLookup` recomputes** with the user's customs included.
+   `completedActivePalette` now resolves correctly.
+7. **The watcher in step 4 fires again** with the corrected palette.
+   `.dark-theme` is set to its final value.
+8. **`loadColorPalette(id)`** runs the five-stage loader chain
+   described above; CSS variables on `:root`, canvas properties,
+   and node-data-type colors all become correct.
+9. **First paint with the right palette.**
+
+> **Race-condition / FOUC finding.** Steps 4–7 are a real gap. If
+> the active palette is a *custom* one, the page paints with the
+> default-dark palette for a frame or two before the custom is
+> applied. Easy to reproduce: import a custom palette, set it
+> active, hard reload. Visible flash. Worth noting as one of the
+> "address #11048" PRs (move custom-palette hydration into the
+> bootstrap chain instead of `GraphCanvas.onMounted`).
+
+## Light/dark switching
+
+`.dark-theme` lives on **`document.body`** (not `:root`). The class
+is toggled by the watcher at `src/views/GraphView.vue:137-154`
+listening to `colorPaletteStore.completedActivePalette.light_theme`:
+
+```ts
+watch(
+  () => colorPaletteStore.completedActivePalette,
+  (newTheme) => {
+    if (newTheme.light_theme) {
+      document.body.classList.remove('dark-theme')
+    } else {
+      document.body.classList.add('dark-theme')
+    }
+    // ...electron host theme update
+  },
+  { immediate: true }
+)
+```
+
+There is **no separate dark-mode toggle** in settings — palette
+choice IS the dark/light choice. A palette is "light" if its
+`light_theme: true` flag is set in JSON. Picking "Light" or "Github"
+removes the class; picking any other built-in adds it.
+
+PrimeVue's dark-mode CSS scopes to `.dark-theme, :root:has(.dark-theme)`
+(see `src/main.ts`). So PrimeVue's `--p-*` tokens swap between dark
+and light values automatically when the class toggles. The palette
+JSON's `comfy_base` keys then layer on top via `:root.style.setProperty`.
+
+## The `--palette-*` fallback namespace
+
+When `loadComfyColorPalette` (`colorPaletteService.ts:209-226`) sees
+that an *optional* `comfy_base` key is missing from the active
+palette, it sets the corresponding CSS variable to a `var(--palette-${key})`
+reference instead of leaving it unset.
+
+The `--palette-*` defaults are declared at
+`packages/design-system/src/css/style.css:288-312`, in `:root` only:
+
+```css
+:root {
+  --palette-contrast-mix-color: #fff;
+  --palette-interface-panel-surface: var(--comfy-menu-bg);
+  --palette-interface-stroke: color-mix(
+    in srgb,
+    var(--interface-panel-surface) 75.5%,
+    var(--contrast-mix-color)
+  );
+  --palette-interface-panel-box-shadow: 1px 1px 8px 0 rgb(0 0 0 / 0.4);
+  --palette-interface-panel-drop-shadow: 1px 1px 4px rgb(0 0 0 / 0.4);
+  --palette-interface-panel-hover-surface: color-mix(
+    in srgb, var(--interface-panel-surface) 92.5%,
+    var(--contrast-mix-color)
+  );
+  --palette-interface-panel-selected-surface: color-mix(/* ... */);
+  --palette-interface-button-hover-surface: color-mix(/* ... */);
+}
+```
+
+These are **derivations** from other palette-aware variables
+(`--comfy-menu-bg`, `--interface-panel-surface`, `--contrast-mix-color`).
+That's intentionally clever: when the active palette swaps and
+`--comfy-menu-bg` changes, the fallback values automatically follow,
+because they're computed via `color-mix` of palette-aware inputs.
+
+> **Light-mode fallback gap.** The `--palette-*` definitions are not
+> redefined in `.dark-theme`, but their *inputs* are palette-aware
+> via the cascade. So in practice the fallbacks track the palette
+> correctly. Worth verifying empirically — could be a subtle theming
+> bug if any of the inputs (`--contrast-mix-color: #fff`) aren't
+> palette-aware.
+
+## The four overlapping color systems (per issue #11048)
+
+The team has **already filed an audit issue** acknowledging the
+fragility we're working around:
+[`Comfy-Org/ComfyUI_frontend#11048`](https://github.com/Comfy-Org/ComfyUI_frontend/issues/11048)
+— *"4 layered color systems create fragile overrides"*. Quote from
+the issue:
+
+> "The color palette service dynamically overrides CSS variables set
+> by the design system, which can be fragile. As PrimeVue is
+> migrated away, one layer will eventually be removed. Consider
+> having the palette system generate Tailwind-compatible tokens
+> directly."
+
+The four layers, in order of cascade:
+
+| Layer | Where | Mechanism |
+|---|---|---|
+| 1. PrimeVue Aura preset | `src/main.ts:43-100` | PrimeVue's own CSS, switched via `.dark-theme` selector. Provides `--p-*` tokens. |
+| 2. Design-system @theme | `packages/design-system/src/css/style.css` | Tailwind 4 `@theme` block. Semantic tokens reference `--p-*` and palette-set values. |
+| 3. Color palette JSON | `colorPaletteService.loadComfyColorPalette` | Runtime `:root.style.setProperty('--key', value)` overrides at app boot and on palette change. |
+| 4. LiteGraph CSS | `src/lib/litegraph/public/css/litegraph.css` | Canvas-internal styling, partly themed via palette JS properties. |
+
+**Long-term direction signaled by the team:** PrimeVue (layer 1) is
+being phased out as part of vue-migration. The palette system
+(layer 3) should eventually emit Tailwind tokens directly into the
+design-system's `@theme` rather than via runtime
+`style.setProperty`. This is the architectural target reviewers
+will measure PRs against.
+
+## Test coverage
+
+`browser_tests/tests/colorPalette.spec.ts` is the only palette-
+specific test file. It covers:
+
+- ✓ Custom palette loading via settings.
+- ✓ Custom palette application via `addCustomColorPalette()`.
+- ✓ Legacy `custom_` prefix migration (`coreSettings.ts:956-960`).
+- ✓ Light-theme rendering (visual / `light_theme` flag).
+- ✓ Node-color opacity adjustments persist across theme changes.
+- ✓ Node colors aren't serialized into workflow JSON.
+
+Coverage gaps:
+
+- ✗ Partial-palette merge: missing optional keys → `--palette-*`
+  fallback chain.
+- ✗ First-run scenario: no `Comfy.ColorPalette` setting yet.
+- ✗ Custom-palette hydration race: the FOUC window between
+  GraphView.vue:137 and GraphCanvas.vue:566.
+- ✗ `.dark-theme` class toggle behavior in isolation (only covered
+  indirectly via light_theme rendering tests).
+- ✗ PrimeVue `--p-*` ↔ palette interaction when palette swaps (do
+  PrimeVue tokens actually update?).
+
+Recent palette-system git history (last 90 days): no commits to
+`colorPaletteService.ts`, `colorPaletteStore.ts`,
+`colorPaletteSchema.ts`, `coreColorPalettes.ts`, or
+`src/assets/palettes/*.json`. The system is stable but neglected.
+
 ## Why our `@import` bypass is invisible (and gets erased)
 
 Our generator currently writes
@@ -551,11 +728,28 @@ of UI on a creative-AI desktop; it should be themable to match.
 
 ## Appendix B: open issues and known bugs
 
-- [`comfyanonymous/ComfyUI#1999`](https://github.com/comfyanonymous/ComfyUI/issues/1999)
+**Theme-system architectural** (Comfy-Org/ComfyUI_frontend):
+- [`#11048`](https://github.com/Comfy-Org/ComfyUI_frontend/issues/11048)
+  — *"4 layered color systems create fragile overrides"*. The
+  umbrella issue. Filed by the team's `audit-code` skill, labels
+  `audit:conflicting`, `area:vue-migration`. Future-direction note:
+  palette should generate Tailwind tokens directly; PrimeVue layer
+  is being phased out.
+- [`#2153`](https://github.com/Comfy-Org/ComfyUI_frontend/issues/2153)
+  — *"Color Palette system cannot distinguish between original and
+  previously modified Palettes"*. Concrete bug related to the legacy
+  `custom_` migration path.
+- [`#1363`](https://github.com/Comfy-Org/ComfyUI_frontend/issues/1363)
+  — *"[DevTask] Move colorPalettes to core"*. Long-since-closed task
+  that explains why palette infrastructure is in the frontend
+  package today.
+
+**`user.css` / runtime CSS escape hatches** (comfyanonymous/ComfyUI):
+- [`#1999`](https://github.com/comfyanonymous/ComfyUI/issues/1999)
   — `user.css` gets overwritten on update.
-- [`comfyanonymous/ComfyUI#6544`](https://github.com/comfyanonymous/ComfyUI/issues/6544)
+- [`#6544`](https://github.com/comfyanonymous/ComfyUI/issues/6544)
   — same root cause, more recent.
-- [`comfyanonymous/ComfyUI#2328`](https://github.com/comfyanonymous/ComfyUI/discussions/2328)
+- [`#2328`](https://github.com/comfyanonymous/ComfyUI/discussions/2328)
   — Kitchen-ComfyUI discussion; full UI replacement style precedent.
 
 ## Appendix C: distribution channels (URL list)
