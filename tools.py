@@ -403,6 +403,13 @@ _BOLD = "\033[1m"
 _DIM = "\033[2m"
 _RESET = "\033[0m"
 
+_GROUP_LABELS = {
+    "comfy_base": "Comfy base — UI chrome",
+    "litegraph_base": "LiteGraph — canvas",
+    "node_slot": "Node slot — connection types",
+}
+_GROUP_ORDER = ["comfy_base", "litegraph_base", "node_slot"]
+
 
 def _format_token_line(key, value, override):
     """Format one token line in the swatch.
