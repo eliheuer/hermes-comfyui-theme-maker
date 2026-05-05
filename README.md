@@ -197,9 +197,14 @@ HERMES_COMFYUI_FRONTEND_PATH=/path/to/ComfyUI_frontend \
 - [`docs/architecture.md`](./docs/architecture.md) — component map,
   data flow, integration points, failure modes.
 - [`docs/comfyui-theme-system.md`](./docs/comfyui-theme-system.md) —
-  how ComfyUI's existing theme/palette system works, why this
-  plugin's CSS-import approach bypasses the menu, and concrete PR
-  opportunities to integrate properly.
+  reference for ComfyUI's existing theme / palette system: schema,
+  bootstrap timeline, light/dark mechanics, PrimeVue layering,
+  community ecosystem, test coverage.
+- [`docs/upstream-pr-opportunities.md`](./docs/upstream-pr-opportunities.md)
+  — concrete PRs against `Comfy-Org/ComfyUI_frontend` surfaced by the
+  research, with code-shape sketches, file lists, and a sequencing
+  recommendation. Anchored to upstream issue
+  [#11048](https://github.com/Comfy-Org/ComfyUI_frontend/issues/11048).
 
 ## License
 
